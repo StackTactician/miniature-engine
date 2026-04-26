@@ -21,11 +21,14 @@ class EndpointSummary(BaseModel):
     normalized_path: str
     operation: Literal["create", "read", "update", "delete", "other"]
     has_pagination: bool = False
+    is_authenticated: bool = True
+    is_idor_candidate: bool = False
 
 
 class ModelField(BaseModel):
     name: str
     type: str
+    is_pii: bool = False
 
 
 class DataModel(BaseModel):
@@ -53,3 +56,7 @@ class GraphPayload(BaseModel):
 
 class BuildGraphRequest(BaseModel):
     records: list[TrafficRecord]
+
+
+class CaptureRequest(BaseModel):
+    url: str

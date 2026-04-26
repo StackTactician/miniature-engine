@@ -23,18 +23,24 @@ def build_graph(records: list[TrafficRecord]) -> GraphPayload:
                 metadata={
                     "operation": endpoint.operation,
                     "has_pagination": endpoint.has_pagination,
+                    "is_authenticated": endpoint.is_authenticated,
+                    "is_idor_candidate": endpoint.is_idor_candidate,
                 },
             )
         )
 
     for model in models:
         model_id = f"model:{model.name}"
+        has_pii = any(field.is_pii for field in model.fields)
         nodes.append(
             GraphNode(
                 id=model_id,
                 label=model.name,
                 type="model",
-                metadata={"fields": [field.model_dump() for field in model.fields]},
+                metadata={
+                    "fields": [field.model_dump() for field in model.fields],
+                    "has_pii": has_pii,
+                },
             )
         )
 

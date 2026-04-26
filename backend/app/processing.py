@@ -45,8 +45,8 @@ def detect_pagination(record: TrafficRecord) -> bool:
 
 
 def summarize_endpoints(records: list[TrafficRecord]) -> list[EndpointSummary]:
-    seen: set[tuple[str, str]] = set()
-    summaries: list[EndpointSummary] = []
+    grouped: dict[tuple[str, str], list[TrafficRecord]] = {}
+    raw_paths: dict[tuple[str, str], str] = {}
 
     for record in records:
         parsed = urlparse(record.url)
@@ -54,17 +54,36 @@ def summarize_endpoints(records: list[TrafficRecord]) -> list[EndpointSummary]:
         normalized = normalize_path(raw_path)
         method = record.method.upper()
         key = (method, normalized)
-        if key in seen:
-            continue
+        
+        grouped.setdefault(key, []).append(record)
+        if key not in raw_paths:
+            raw_paths[key] = raw_path
 
-        seen.add(key)
+    summaries: list[EndpointSummary] = []
+    auth_headers = {"authorization", "cookie", "x-api-key"}
+
+    for key, group_records in grouped.items():
+        method, normalized = key
+        raw_path = raw_paths[key]
+        
+        has_pagination = any(detect_pagination(r) for r in group_records)
+        
+        is_authenticated = any(
+            any(k.lower() in auth_headers for k in r.request_headers)
+            for r in group_records
+        )
+        
+        is_idor_candidate = not is_authenticated and "{id}" in normalized
+        
         summaries.append(
             EndpointSummary(
                 method=method,
                 raw_path=raw_path,
                 normalized_path=normalized,
                 operation=METHOD_TO_OPERATION.get(method, "other"),
-                has_pagination=detect_pagination(record),
+                has_pagination=has_pagination,
+                is_authenticated=is_authenticated,
+                is_idor_candidate=is_idor_candidate,
             )
         )
 

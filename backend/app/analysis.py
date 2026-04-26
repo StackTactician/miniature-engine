@@ -38,11 +38,15 @@ def infer_models(records: list[TrafficRecord]) -> list[DataModel]:
             field_types[model_name][key].add(_infer_type(value))
 
     models: list[DataModel] = []
+    pii_keywords = {"email", "password", "ssn", "dob", "phone", "address", "credit_card", "token", "secret"}
+
     for model_name, fields_map in field_types.items():
-        fields = [
-            ModelField(name=field, type="|".join(sorted(types)))
-            for field, types in sorted(fields_map.items())
-        ]
+        fields = []
+        for field, types in sorted(fields_map.items()):
+            is_pii = any(kw in field.lower() for kw in pii_keywords)
+            fields.append(
+                ModelField(name=field, type="|".join(sorted(types)), is_pii=is_pii)
+            )
         models.append(DataModel(name=model_name, fields=fields))
 
     return sorted(models, key=lambda m: m.name)
