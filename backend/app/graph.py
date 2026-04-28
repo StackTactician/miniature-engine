@@ -4,6 +4,31 @@ from app.analysis import infer_models, infer_relationships
 from app.models import GraphEdge, GraphNode, GraphPayload, TrafficRecord
 from app.processing import summarize_endpoints
 
+_IGNORED_PATH_SEGMENTS = {"api", "rest", "graphql", "v1", "v2", "v3", "internal"}
+
+
+def _resource_variants(value: str) -> set[str]:
+    cleaned = value.strip().lower()
+    if not cleaned or cleaned == "{id}":
+        return set()
+    variants = {cleaned}
+    if cleaned.endswith("s") and len(cleaned) > 1:
+        variants.add(cleaned[:-1])
+    else:
+        variants.add(f"{cleaned}s")
+    return variants
+
+
+def _endpoint_resource_candidates(normalized_path: str) -> list[str]:
+    segments = [segment for segment in normalized_path.strip("/").split("/") if segment]
+    candidates: list[str] = []
+    for segment in segments:
+        lowered = segment.lower()
+        if lowered in _IGNORED_PATH_SEGMENTS or lowered == "{id}":
+            continue
+        candidates.append(lowered)
+    return candidates
+
 
 def build_graph(records: list[TrafficRecord]) -> GraphPayload:
     endpoints = summarize_endpoints(records)
@@ -45,14 +70,31 @@ def build_graph(records: list[TrafficRecord]) -> GraphPayload:
         )
 
     model_names = {model.name for model in models}
+    model_lookup: dict[str, str] = {}
+    for model_name in model_names:
+        for variant in _resource_variants(model_name):
+            model_lookup.setdefault(variant, model_name)
+
     for endpoint in endpoints:
-        guessed = endpoint.normalized_path.strip("/").split("/")[0]
-        if guessed in model_names:
+        guessed_model: str | None = None
+        candidates = _endpoint_resource_candidates(endpoint.normalized_path)
+
+        if candidates:
+            for candidate in candidates:
+                for variant in _resource_variants(candidate):
+                    if variant in model_lookup:
+                        guessed_model = model_lookup[variant]
+                        break
+                if guessed_model:
+                    break
+
+        if guessed_model:
             edges.append(
                 GraphEdge(
                     source=f"endpoint:{endpoint.method}:{endpoint.normalized_path}",
-                    target=f"model:{guessed}",
+                    target=f"model:{guessed_model}",
                     relation="returns",
+                    metadata={"confidence": "high"},
                 )
             )
 
@@ -62,6 +104,7 @@ def build_graph(records: list[TrafficRecord]) -> GraphPayload:
                 source=f"model:{source}",
                 target=f"model:{target}",
                 relation="references",
+                metadata={"confidence": "medium"},
             )
         )
 

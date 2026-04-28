@@ -47,6 +47,7 @@ class GraphEdge(BaseModel):
     source: str
     target: str
     relation: Literal["returns", "references"]
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class GraphPayload(BaseModel):

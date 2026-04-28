@@ -1,4 +1,5 @@
 import dagre from '@dagrejs/dagre'
+import { MarkerType } from '@xyflow/react'
 
 const NODE_DIMS = {
   endpointNode: { width: 250, height: 68 },
@@ -41,12 +42,15 @@ export function toFlowGraph(payload) {
     target: e.target,
     label: e.relation,
     type: 'smoothstep',
+    markerEnd: { type: MarkerType.ArrowClosed },
     animated: e.relation === 'returns',
+    data: { confidence: e.metadata?.confidence ?? 'medium', relation: e.relation },
     style: {
-      stroke: e.relation === 'returns' ? '#6366f1' : '#a855f7',
-      strokeWidth: 1.5,
+      stroke: e.relation === 'returns' ? '#7c8dff' : '#c084fc',
+      strokeWidth: e.relation === 'returns' ? 2.8 : 2,
+      opacity: e.relation === 'returns' ? 0.95 : 0.8,
     },
-    labelStyle: { fill: '#64748b', fontSize: 11, fontFamily: 'Inter, sans-serif' },
+    labelStyle: { fill: '#94a3b8', fontSize: 11, fontFamily: 'Inter, sans-serif' },
     labelBgStyle: { fill: '#0d0d14', fillOpacity: 1 },
     labelBgPadding: [4, 6],
     labelBgBorderRadius: 4,
@@ -54,4 +58,36 @@ export function toFlowGraph(payload) {
 
   const laidOut = applyDagreLayout(nodes, edges)
   return { nodes: laidOut, edges }
+}
+
+export function graphComponents(nodes, edges) {
+  const adjacency = new Map(nodes.map((node) => [node.id, new Set()]))
+  edges.forEach((edge) => {
+    if (adjacency.has(edge.source) && adjacency.has(edge.target)) {
+      adjacency.get(edge.source).add(edge.target)
+      adjacency.get(edge.target).add(edge.source)
+    }
+  })
+
+  const visited = new Set()
+  const components = []
+  for (const node of nodes) {
+    if (visited.has(node.id)) continue
+    const queue = [node.id]
+    visited.add(node.id)
+    const members = []
+    while (queue.length) {
+      const current = queue.shift()
+      members.push(current)
+      for (const next of adjacency.get(current) ?? []) {
+        if (!visited.has(next)) {
+          visited.add(next)
+          queue.push(next)
+        }
+      }
+    }
+    components.push(members)
+  }
+
+  return components.sort((a, b) => b.length - a.length)
 }

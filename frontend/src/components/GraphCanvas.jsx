@@ -2,6 +2,7 @@ import { ReactFlow, Background, Controls, MiniMap, BackgroundVariant } from '@xy
 import '@xyflow/react/dist/style.css'
 import { EndpointNode } from './nodes/EndpointNode'
 import { ModelNode } from './nodes/ModelNode'
+import { graphComponents } from '../layout'
 
 const nodeTypes = {
   endpointNode: EndpointNode,
@@ -16,7 +17,15 @@ function minimapColor(node) {
   )
 }
 
-export function GraphCanvas({ nodes, edges, onNodeClick, loading, loadingMessage = 'Building graph...' }) {
+export function GraphCanvas({
+  nodes,
+  edges,
+  onNodeClick,
+  selectedNodeId,
+  showMainComponentOnly,
+  loading,
+  loadingMessage = 'Building graph...',
+}) {
   if (loading) {
     return (
       <div className="canvas-state">
@@ -41,10 +50,57 @@ export function GraphCanvas({ nodes, edges, onNodeClick, loading, loadingMessage
     )
   }
 
+  const components = graphComponents(nodes, edges)
+  const mainComponentIds = new Set(components[0] ?? [])
+
+  const visibleNodes = showMainComponentOnly ? nodes.filter((node) => mainComponentIds.has(node.id)) : nodes
+  const visibleNodeIds = new Set(visibleNodes.map((node) => node.id))
+  const visibleEdges = edges.filter((edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target))
+
+  let neighborIds = null
+  if (selectedNodeId) {
+    neighborIds = new Set([selectedNodeId])
+    visibleEdges.forEach((edge) => {
+      if (edge.source === selectedNodeId) neighborIds.add(edge.target)
+      if (edge.target === selectedNodeId) neighborIds.add(edge.source)
+    })
+  }
+
+  const styledNodes = visibleNodes.map((node) => {
+    const isDimmed = neighborIds ? !neighborIds.has(node.id) : false
+    return {
+      ...node,
+      style: {
+        ...(node.style ?? {}),
+        opacity: isDimmed ? 0.25 : 1,
+        transition: 'opacity 120ms ease',
+      },
+    }
+  })
+
+  const styledEdges = visibleEdges.map((edge) => {
+    const isConnectedToSelected = selectedNodeId
+      ? edge.source === selectedNodeId || edge.target === selectedNodeId
+      : true
+
+    const confidence = edge.data?.confidence ?? 'medium'
+    const confidenceOpacity = confidence === 'high' ? 1 : confidence === 'low' ? 0.45 : 0.7
+    const isDimmed = selectedNodeId && !isConnectedToSelected
+
+    return {
+      ...edge,
+      style: {
+        ...(edge.style ?? {}),
+        opacity: isDimmed ? 0.14 : confidenceOpacity,
+      },
+      label: isConnectedToSelected ? edge.label : '',
+    }
+  })
+
   return (
     <ReactFlow
-      nodes={nodes}
-      edges={edges}
+      nodes={styledNodes}
+      edges={styledEdges}
       nodeTypes={nodeTypes}
       onNodeClick={(_, node) => onNodeClick(node)}
       fitView
