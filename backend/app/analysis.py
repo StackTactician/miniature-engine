@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import re
 from typing import Any
 from urllib.parse import urlparse
 
 from app.models import DataModel, ModelField, TrafficRecord
+
+_ID_LIKE_SEGMENT = re.compile(r"^\d+$|^[0-9a-fA-F]{8,}$")
 
 
 def _infer_type(value: Any) -> str:
@@ -25,6 +28,18 @@ def _infer_type(value: Any) -> str:
     return "unknown"
 
 
+def _infer_model_name(url: str) -> str:
+    path_parts = [part for part in urlparse(url).path.split("/") if part]
+    if not path_parts:
+        return "root"
+
+    last = path_parts[-1]
+    if _ID_LIKE_SEGMENT.match(last) and len(path_parts) > 1:
+        return path_parts[-2]
+
+    return last
+
+
 def infer_models(records: list[TrafficRecord]) -> list[DataModel]:
     field_types: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
 
@@ -33,7 +48,7 @@ def infer_models(records: list[TrafficRecord]) -> list[DataModel]:
         if not isinstance(body, dict):
             continue
 
-        model_name = _model_name_from_url(record.url)
+        model_name = _infer_model_name(record.url)
 
         for key, value in body.items():
             field_types[model_name][key].add(_infer_type(value))
