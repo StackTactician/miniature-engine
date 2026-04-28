@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { buildGraph, captureGraphStream, createSession, getSession, listSessions } from './api'
+import { buildGraph, captureGraph, captureGraphStream, createSession, getSession, listSessions } from './api'
 import { parseHar } from './harParser'
 import { toFlowGraph } from './layout'
 import { InputPanel } from './components/InputPanel'
@@ -41,19 +41,31 @@ export function App() {
 
       if (input.type === 'live') {
         setLoadingMessage('Opening live capture stream...')
-        payload = await new Promise((resolve, reject) => {
-          const disconnect = captureGraphStream(input.url, {
-            onProgress: (message) => setLoadingMessage(message),
-            onResult: (graph) => {
-              disconnect()
-              resolve(graph)
-            },
-            onError: (streamErr) => {
-              disconnect()
-              reject(streamErr)
-            },
+        try {
+          payload = await new Promise((resolve, reject) => {
+            const disconnect = captureGraphStream(input.url, {
+              onProgress: (message) => setLoadingMessage(message),
+              onResult: (graph) => {
+                disconnect()
+                resolve(graph)
+              },
+              onError: (streamErr) => {
+                disconnect()
+                reject(streamErr)
+              },
+            })
           })
-        })
+        } catch (streamErr) {
+          const isTransportFailure = streamErr instanceof Error && streamErr.kind === 'transport'
+          if (!isTransportFailure) {
+            throw streamErr
+          }
+
+          // If websocket transport fails (e.g. abnormal close), fall back to
+          // one-shot HTTP capture so users still get a concrete backend error/result.
+          setLoadingMessage('Live stream unavailable, retrying direct capture...')
+          payload = await captureGraph(input.url)
+        }
       } else {
         setLoadingMessage('Building graph...')
         let records

@@ -1,5 +1,12 @@
-const API_BASE = 'http://localhost:8000'
-const WS_BASE = 'ws://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'
+
+function toWsBase(httpBase) {
+  if (httpBase.startsWith('https://')) return `wss://${httpBase.slice('https://'.length)}`
+  if (httpBase.startsWith('http://')) return `ws://${httpBase.slice('http://'.length)}`
+  return httpBase
+}
+
+const WS_BASE = import.meta.env.VITE_WS_BASE ?? toWsBase(API_BASE)
 
 export async function buildGraph(records) {
   const res = await fetch(`${API_BASE}/graph/build`, {
@@ -80,19 +87,51 @@ export async function getSession(sessionId) {
 export function captureGraphStream(url, { onProgress, onResult, onError } = {}) {
   const wsUrl = `${WS_BASE}/capture/stream?url=${encodeURIComponent(url)}`
   const socket = new WebSocket(wsUrl)
+  let settled = false
+  let receivedAnyMessage = false
+
+  const fail = (message, kind = 'backend') => {
+    if (settled) return
+    settled = true
+    const err = new Error(message)
+    err.kind = kind
+    onError?.(err)
+  }
 
   socket.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data)
+      receivedAnyMessage = true
       if (data.type === 'progress') onProgress?.(data.message)
-      if (data.type === 'result') onResult?.(data.graph)
-      if (data.type === 'error') onError?.(new Error(data.message))
+      if (data.type === 'result') {
+        if (settled) return
+        settled = true
+        onResult?.(data.graph)
+        return
+      }
+      if (data.type === 'error') {
+        fail(data.message || 'Live capture failed.', 'backend')
+      }
     } catch {
-      onError?.(new Error('Malformed streaming response from backend.'))
+      fail('Malformed streaming response from backend.', 'transport')
     }
   }
 
-  socket.onerror = () => onError?.(new Error('Live capture socket failed.'))
+  socket.onerror = () => {
+    // onerror often has no useful details; onclose gives better context.
+    if (!receivedAnyMessage) return
+    fail('Live capture socket failed.', 'transport')
+  }
+
+  socket.onclose = (event) => {
+    if (settled) return
+    if (event.code === 1000) {
+      fail('Live capture ended before a graph result was returned.', 'transport')
+      return
+    }
+    const reason = event.reason?.trim()
+    fail(reason || `Live capture socket closed (code ${event.code}).`, 'transport')
+  }
 
   return () => {
     if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
