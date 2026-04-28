@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from typing import Any
+from urllib.parse import urlparse
 
 from app.models import DataModel, ModelField, TrafficRecord
 
@@ -32,7 +33,7 @@ def infer_models(records: list[TrafficRecord]) -> list[DataModel]:
         if not isinstance(body, dict):
             continue
 
-        model_name = record.url.rstrip("/").split("/")[-1] or "root"
+        model_name = _model_name_from_url(record.url)
 
         for key, value in body.items():
             field_types[model_name][key].add(_infer_type(value))
@@ -50,6 +51,27 @@ def infer_models(records: list[TrafficRecord]) -> list[DataModel]:
         models.append(DataModel(name=model_name, fields=fields))
 
     return sorted(models, key=lambda m: m.name)
+
+
+def _looks_like_identifier(segment: str) -> bool:
+    if not segment:
+        return False
+    if segment.isdigit():
+        return True
+    hex_chars = set("0123456789abcdefABCDEF-")
+    return len(segment) >= 8 and all(ch in hex_chars for ch in segment)
+
+
+def _model_name_from_url(url: str) -> str:
+    path = urlparse(url).path.strip("/")
+    if not path:
+        return "root"
+
+    segments = [segment for segment in path.split("/") if segment]
+    for segment in reversed(segments):
+        if not _looks_like_identifier(segment):
+            return segment
+    return segments[0]
 
 
 def infer_relationships(models: list[DataModel]) -> list[tuple[str, str]]:

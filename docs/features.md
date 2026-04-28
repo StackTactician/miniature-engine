@@ -1,6 +1,6 @@
-# Feature Registry
+# Miniature Engine Feature Registry
 
-Comprehensive record of all implemented, in-progress, and planned features for API Graph Mapper.
+Comprehensive record of all implemented, in-progress, and planned features for Miniature Engine.
 Status key: `[x]` done · `[ ]` planned · `[-]` partial / stub
 
 ---
@@ -15,7 +15,7 @@ Responsible for collecting raw HTTP traffic records.
 | `[x]` | `StaticCaptureAdapter` | Development adapter — wraps a pre-collected list |
 | `[x]` | JSON records via API | `POST /graph/build` accepts `TrafficRecord[]` directly |
 | `[x]` | HAR file parsing (frontend) | Converts Chrome/Firefox `.har` exports to `TrafficRecord[]`; filters to JSON responses only |
-| `[ ]` | Playwright live capture | Headless browser visits a URL, intercepts all XHR/fetch traffic, returns graph automatically |
+| `[x]` | Playwright live capture | `POST /capture` runs headless Chromium, captures JSON XHR/fetch traffic, returns graph |
 | `[ ]` | mitmproxy adapter | Runs as a proxy; all traffic through it gets captured in real time |
 | `[ ]` | Browser extension | Captures traffic from an active browsing session without a proxy |
 | `[ ]` | Curl replay adapter | Accepts a list of curl commands, replays them, captures responses |
@@ -73,7 +73,7 @@ Assembles the final graph payload from processed endpoints and inferred models.
 | `[x]` | `returns` edges | Endpoint → Model when the first path segment matches a model name |
 | `[x]` | `references` edges | Model → Model when a `*_id` field points to another known model |
 | `[ ]` | `accepts` edges | Endpoint → Model when request body matches a known model's schema |
-| `[ ]` | Graph diff | Compare two graph payloads and surface added/removed/changed nodes and edges |
+| `[x]` | Graph diff | `POST /graph/diff` compares baseline vs candidate records and returns added/removed/changed nodes/edges |
 | `[ ]` | Subgraph extraction | Return only the subgraph reachable from a given node |
 
 ---
@@ -84,13 +84,14 @@ Assembles the final graph payload from processed endpoints and inferred models.
 |--------|---------|-------|
 | `[x]` | `GET /health` | Liveness check |
 | `[x]` | `POST /graph/build` | Accepts `TrafficRecord[]`, returns `GraphPayload` |
+| `[x]` | `POST /graph/diff` | Accepts baseline + candidate records, returns structured graph diff summary |
 | `[x]` | CORS for `localhost:5173` | Allows the Vite dev server to call the API |
-| `[ ]` | `POST /capture` | Accepts a URL, runs Playwright capture, returns graph |
+| `[x]` | `POST /capture` | Accepts a URL, runs Playwright capture, returns graph |
 | `[ ]` | `POST /ingest/har` | Server-side HAR parsing (alternative to frontend parsing) |
-| `[ ]` | `GET /sessions` | List saved graph sessions |
-| `[ ]` | `GET /sessions/{id}` | Retrieve a saved session |
-| `[ ]` | `POST /sessions` | Save a named session |
-| `[ ]` | WebSocket streaming | Stream nodes/edges as they are discovered during live capture |
+| `[x]` | `GET /sessions` | List saved graph sessions with counts |
+| `[x]` | `GET /sessions/{id}` | Retrieve a saved session |
+| `[x]` | `POST /sessions` | Save a named session |
+| `[-]` | WebSocket streaming | `/capture/stream` now streams progress + final graph payload; incremental node/edge streaming still pending |
 
 ---
 
@@ -104,7 +105,7 @@ Assembles the final graph payload from processed endpoints and inferred models.
 | `[x]` | HAR file browser picker | Fallback file input for users who prefer click-to-browse |
 | `[x]` | Input validation | Parse errors shown inline before submission |
 | `[x]` | Empty HAR guard | Friendly error when no JSON API responses are found in the HAR |
-| `[ ]` | URL input (live capture) | Text field + "Capture" button — triggers `POST /capture` on the backend |
+| `[x]` | URL input (live capture) | Text field + "Build Graph" action triggering live capture |
 | `[ ]` | Multi-file HAR merge | Accept multiple `.har` files and merge all records before building |
 | `[ ]` | OpenAPI import | Accept a `swagger.json` / `openapi.yaml` as input |
 
@@ -135,7 +136,7 @@ Assembles the final graph payload from processed endpoints and inferred models.
 | `[ ]` | Node grouping | Visually group endpoints by resource prefix (`/users/*`) |
 | `[ ]` | Export as PNG/SVG | Download the current graph view as an image |
 | `[ ]` | Export as JSON | Download the raw graph payload for re-import |
-| `[ ]` | Live capture progress | Show nodes appearing in real time during Playwright capture via WebSocket |
+| `[-]` | Live capture progress | Streams textual capture progress via WebSocket; incremental node rendering still pending |
 
 ---
 
@@ -168,7 +169,7 @@ Assembles the final graph payload from processed endpoints and inferred models.
 | `[x]` | Inter + JetBrains Mono fonts | Professional typography for UI and code elements |
 | `[x]` | Responsive layout | Three-column shell (sidebar · canvas · detail) |
 | `[ ]` | Keyboard shortcuts | `Escape` to deselect, `/` to open search, `F` to fit view |
-| `[ ]` | Session history sidebar | List of previously built graphs for the session |
+| `[x]` | Session history sidebar | Save/load named graph snapshots from the left panel |
 | `[ ]` | Dark/light mode toggle | |
 | `[ ]` | Toast notifications | Non-blocking success/warning messages |
 
@@ -182,7 +183,7 @@ Assembles the final graph payload from processed endpoints and inferred models.
 | `[ ]` | SQLite persistence | Lightweight local persistence, no infra required |
 | `[ ]` | PostgreSQL backend | Production-grade relational store |
 | `[ ]` | Neo4j backend | Native graph database — natural fit for the data model |
-| `[ ]` | Named sessions | Save and reload named graph snapshots |
+| `[x]` | Named sessions | Save and reload named graph snapshots via API + frontend sidebar |
 | `[ ]` | Session diff | Compare two saved sessions side by side |
 
 ---
@@ -199,5 +200,16 @@ Assembles the final graph payload from processed endpoints and inferred models.
 | `[ ]` | CI/CD integration | Run as a CLI tool on PRs; diff API surface and comment on changes |
 | `[ ]` | Fuzzing hooks | Pass discovered endpoints to a fuzzer (e.g. ffuf, Burp) |
 | `[ ]` | Team collaboration | Shareable graph URLs; multi-user session viewing |
-| `[ ]` | CLI entrypoint | `agm capture https://example.com` — run from the terminal without the UI |
+| `[ ]` | CLI entrypoint | `miniature-engine capture https://example.com` — run from the terminal without the UI |
 | `[ ]` | Docker Compose setup | Single `docker compose up` to run frontend + backend together |
+
+---
+
+## 12. Strategic Themes (2026)
+
+| Theme | Description | Related Features |
+|------|-------------|------------------|
+| Diff-first workflows | Make graph comparison core to release/security review | Graph diff, session diff, CI/CD integration |
+| Capture coverage expansion | Capture more protocols and execution paths | Playwright stream refinement, mitmproxy, GraphQL/WebSocket/gRPC |
+| Team adoption | Improve persistence, sharing, and collaboration | Named sessions, share links, session history, RBAC-ready APIs |
+| Security signal quality | Improve triage relevance and confidence | auth/PII/IDOR/rate-limit detection, risk overlays, detailed evidence |

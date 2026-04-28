@@ -15,13 +15,21 @@ const SAMPLE = JSON.stringify(
   2
 )
 
-export function InputPanel({ onBuild, loading }) {
+export function InputPanel({
+  onBuild,
+  onSaveSession,
+  onLoadSession,
+  sessions = [],
+  loading,
+  canSave = false,
+}) {
   const [tab, setTab] = useState('json')
   const [jsonText, setJsonText] = useState('')
   const [parseError, setParseError] = useState(null)
   const [harFile, setHarFile] = useState(null)
   const [dragOver, setDragOver] = useState(false)
   const [liveUrl, setLiveUrl] = useState('')
+  const [sessionName, setSessionName] = useState('')
   const fileRef = useRef(null)
 
   function handleJsonChange(e) {
@@ -86,6 +94,21 @@ export function InputPanel({ onBuild, loading }) {
     tab === 'live' ? liveUrl.trim().length > 0 :
     harFile !== null
 
+  async function handleSaveSessionClick() {
+    const trimmed = sessionName.trim()
+    if (!trimmed) {
+      setParseError('Enter a session name before saving.')
+      return
+    }
+    try {
+      await onSaveSession(trimmed)
+      setSessionName('')
+      setParseError(null)
+    } catch (err) {
+      setParseError(err.message || 'Failed to save session.')
+    }
+  }
+
   return (
     <aside className="input-panel">
       <div className="input-panel__brand">
@@ -94,7 +117,7 @@ export function InputPanel({ onBuild, loading }) {
           <span className="brand-logo__dot brand-logo__dot--2" />
           <span className="brand-logo__dot brand-logo__dot--3" />
         </div>
-        <span className="brand-name">API Graph Mapper</span>
+        <span className="brand-name">Miniature Engine</span>
       </div>
 
       <div className="tab-bar">
@@ -140,7 +163,7 @@ export function InputPanel({ onBuild, loading }) {
               onKeyDown={(e) => e.key === 'Enter' && !loading && canBuild && handleBuild()}
             />
             <div className="live-capture-info">
-              <p>A headless Chromium browser will visit this URL, intercept all XHR and fetch requests, and build the graph from the captured JSON responses.</p>
+              <p>A headless Chromium browser will visit this URL, intercept XHR/fetch requests, and stream capture progress while the graph is built.</p>
               <p className="live-capture-info__note">Allow up to 30 seconds. Works best on SPAs and API-driven sites.</p>
             </div>
           </>
@@ -193,6 +216,45 @@ export function InputPanel({ onBuild, loading }) {
           'Build Graph'
         )}
       </button>
+
+      <div className="session-panel">
+        <div className="label-row">
+          <span className="field-label">Sessions</span>
+        </div>
+        <div className="session-save-row">
+          <input
+            className="session-input"
+            type="text"
+            placeholder="Session name"
+            value={sessionName}
+            onChange={(e) => setSessionName(e.target.value)}
+          />
+          <button
+            className="session-save-btn"
+            onClick={handleSaveSessionClick}
+            disabled={loading || !canSave}
+          >
+            Save
+          </button>
+        </div>
+        <div className="session-list">
+          {sessions.length === 0 ? (
+            <div className="session-empty">No saved sessions yet.</div>
+          ) : sessions.map((session) => (
+            <button
+              key={session.id}
+              className="session-item"
+              onClick={() => onLoadSession(session.id)}
+              disabled={loading}
+            >
+              <div className="session-item__name">{session.name}</div>
+              <div className="session-item__meta">
+                {session.node_count} nodes · {session.edge_count} edges
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="input-panel__footer">
         Backend at <code>localhost:8000</code>
