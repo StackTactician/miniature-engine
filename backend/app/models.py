@@ -60,3 +60,43 @@ class BuildGraphRequest(BaseModel):
 
 class CaptureRequest(BaseModel):
     url: str
+
+
+class GraphDiffNodeChange(BaseModel):
+    id: str
+    before: GraphNode
+    after: GraphNode
+
+
+class GraphDiffRequest(BaseModel):
+    baseline_records: list[TrafficRecord]
+    candidate_records: list[TrafficRecord]
+
+
+class GraphDiffPayload(BaseModel):
+    added_nodes: list[GraphNode]
+    removed_nodes: list[GraphNode]
+    changed_nodes: list[GraphDiffNodeChange]
+    added_edges: list[GraphEdge]
+    removed_edges: list[GraphEdge]
+    summary: dict[str, int]
+
+
+class CreateSessionRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    graph: GraphPayload
+
+
+class SessionSummary(BaseModel):
+    id: str
+    name: str
+    created_at: str
+    node_count: int
+    edge_count: int
+
+
+class SessionRecord(BaseModel):
+    id: str
+    name: str
+    created_at: str
+    graph: GraphPayload

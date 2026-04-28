@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react'
-import { buildGraph, captureGraph } from './api'
+import { useState, useCallback, useEffect } from 'react'
+import { buildGraph, captureGraphStream, createSession, getSession, listSessions } from './api'
 import { parseHar } from './harParser'
 import { toFlowGraph } from './layout'
 import { InputPanel } from './components/InputPanel'
@@ -14,6 +14,21 @@ export function App() {
   const [loading, setLoading] = useState(false)
   const [loadingMessage, setLoadingMessage] = useState('Building graph...')
   const [error, setError] = useState(null)
+  const [currentGraph, setCurrentGraph] = useState(null)
+  const [sessions, setSessions] = useState([])
+
+  const refreshSessions = useCallback(async () => {
+    try {
+      const data = await listSessions()
+      setSessions(data)
+    } catch {
+      // Keep graph workflows functional even if session APIs are unavailable.
+    }
+  }, [])
+
+  useEffect(() => {
+    refreshSessions()
+  }, [refreshSessions])
 
   async function handleBuild(input) {
     setLoading(true)
@@ -24,8 +39,20 @@ export function App() {
       let payload
 
       if (input.type === 'live') {
-        setLoadingMessage('Launching browser and capturing traffic...\nThis may take up to 30 seconds.')
-        payload = await captureGraph(input.url)
+        setLoadingMessage('Opening live capture stream...')
+        payload = await new Promise((resolve, reject) => {
+          const disconnect = captureGraphStream(input.url, {
+            onProgress: (message) => setLoadingMessage(message),
+            onResult: (graph) => {
+              disconnect()
+              resolve(graph)
+            },
+            onError: (streamErr) => {
+              disconnect()
+              reject(streamErr)
+            },
+          })
+        })
       } else {
         setLoadingMessage('Building graph...')
         let records
@@ -47,10 +74,37 @@ export function App() {
       const { nodes: rfNodes, edges: rfEdges } = toFlowGraph(payload)
       setNodes(rfNodes)
       setEdges(rfEdges)
+      setCurrentGraph(payload)
     } catch (err) {
       setError(err.message)
       setNodes([])
       setEdges([])
+      setCurrentGraph(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleSaveSession(name) {
+    if (!currentGraph) throw new Error('Build a graph before saving a session.')
+    await createSession(name, currentGraph)
+    await refreshSessions()
+  }
+
+  async function handleLoadSession(sessionId) {
+    setLoading(true)
+    setError(null)
+    setSelectedNode(null)
+    setLoadingMessage('Loading saved session...')
+    try {
+      const session = await getSession(sessionId)
+      const payload = session.graph
+      const { nodes: rfNodes, edges: rfEdges } = toFlowGraph(payload)
+      setNodes(rfNodes)
+      setEdges(rfEdges)
+      setCurrentGraph(payload)
+    } catch (err) {
+      setError(err.message)
     } finally {
       setLoading(false)
     }
@@ -64,7 +118,14 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <InputPanel onBuild={handleBuild} loading={loading} />
+      <InputPanel
+        onBuild={handleBuild}
+        onSaveSession={handleSaveSession}
+        onLoadSession={handleLoadSession}
+        sessions={sessions}
+        loading={loading}
+        canSave={Boolean(currentGraph)}
+      />
 
       <div className="canvas-area">
         {error && (

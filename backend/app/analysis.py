@@ -68,6 +68,27 @@ def infer_models(records: list[TrafficRecord]) -> list[DataModel]:
     return sorted(models, key=lambda m: m.name)
 
 
+def _looks_like_identifier(segment: str) -> bool:
+    if not segment:
+        return False
+    if segment.isdigit():
+        return True
+    hex_chars = set("0123456789abcdefABCDEF-")
+    return len(segment) >= 8 and all(ch in hex_chars for ch in segment)
+
+
+def _model_name_from_url(url: str) -> str:
+    path = urlparse(url).path.strip("/")
+    if not path:
+        return "root"
+
+    segments = [segment for segment in path.split("/") if segment]
+    for segment in reversed(segments):
+        if not _looks_like_identifier(segment):
+            return segment
+    return segments[0]
+
+
 def infer_relationships(models: list[DataModel]) -> list[tuple[str, str]]:
     model_names = {m.name for m in models}
     relationships: set[tuple[str, str]] = set()

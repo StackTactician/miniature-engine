@@ -344,6 +344,93 @@ html, body, #root {
   transition: background 0.15s, opacity 0.15s, box-shadow 0.15s;
   box-shadow: 0 0 20px var(--accent-glow);
 }
+
+.session-panel {
+  border-top: 1px solid var(--border);
+  margin: 0 16px;
+  padding: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+}
+
+.session-save-row {
+  display: flex;
+  gap: 8px;
+}
+
+.session-input {
+  flex: 1;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  font-size: 12px;
+  outline: none;
+}
+
+.session-input:focus {
+  border-color: var(--border-focus);
+}
+
+.session-save-btn {
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.session-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: auto;
+}
+
+.session-item {
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.session-item:hover {
+  background: var(--bg-surface-hov);
+}
+
+.session-item:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.session-item__name {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.session-item__meta {
+  color: var(--text-secondary);
+  font-size: 11px;
+  margin-top: 3px;
+}
+
+.session-empty {
+  color: var(--text-muted);
+  font-size: 11px;
+}
 .build-btn:hover:not(:disabled) {
   background: var(--accent-hover);
   box-shadow: 0 0 30px var(--accent-glow);
