@@ -16,6 +16,7 @@ export function App() {
   const [error, setError] = useState(null)
   const [currentGraph, setCurrentGraph] = useState(null)
   const [sessions, setSessions] = useState([])
+  const [showMainComponentOnly, setShowMainComponentOnly] = useState(false)
 
   const refreshSessions = useCallback(async () => {
     try {
@@ -134,10 +135,24 @@ export function App() {
           </div>
         )}
         <StatsBar nodes={nodes} edges={edges} />
+        {nodes.length > 0 && (
+          <div className="graph-toolbar">
+            <label className="graph-toolbar__toggle">
+              <input
+                type="checkbox"
+                checked={showMainComponentOnly}
+                onChange={(e) => setShowMainComponentOnly(e.target.checked)}
+              />
+              <span>Focus largest connected component</span>
+            </label>
+          </div>
+        )}
         <GraphCanvas
           nodes={nodes}
           edges={edges}
           onNodeClick={handleNodeClick}
+          selectedNodeId={selectedNode?.id ?? null}
+          showMainComponentOnly={showMainComponentOnly}
           loading={loading}
           loadingMessage={loadingMessage}
         />

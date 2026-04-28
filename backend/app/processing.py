@@ -5,7 +5,7 @@ from urllib.parse import parse_qs, urlparse
 
 from app.models import EndpointSummary, TrafficRecord
 
-_ID_SEGMENT = re.compile(r"^\d+$|^[0-9a-fA-F]{8,}$")
+_ID_SEGMENT = re.compile(r"^\d+$|^[0-9a-fA-F-]{8,}$")
 
 
 METHOD_TO_OPERATION = {

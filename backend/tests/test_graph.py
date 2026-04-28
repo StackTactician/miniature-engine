@@ -39,3 +39,25 @@ def test_model_inference_uses_resource_name_not_id_segment() -> None:
     graph = build_graph(records)
 
     assert any(n.id == "model:projects" for n in graph.nodes)
+
+
+def test_endpoint_return_edges_handle_api_prefix_and_pluralization() -> None:
+    records = [
+        TrafficRecord(
+            method="GET",
+            url="https://x.test/api/v1/user/1",
+            response_status=200,
+            response_body={"id": 1, "name": "Ada"},
+        ),
+    ]
+
+    graph = build_graph(records)
+
+    assert any(n.id == "model:user" for n in graph.nodes)
+    assert any(
+        e.relation == "returns"
+        and e.source == "endpoint:GET:/api/v1/user/{id}"
+        and e.target == "model:user"
+        and e.metadata.get("confidence") == "high"
+        for e in graph.edges
+    )

@@ -1,5 +1,5 @@
-from app.analysis import infer_models
-from app.models import TrafficRecord
+from app.analysis import infer_models, infer_relationships
+from app.models import DataModel, ModelField, TrafficRecord
 
 
 def test_infer_models_uses_resource_segment_for_id_paths() -> None:
@@ -38,3 +38,16 @@ def test_infer_models_handles_hex_identifier_segments() -> None:
     models = infer_models(records)
 
     assert [model.name for model in models] == ["teams"]
+
+
+def test_infer_relationships_handles_camel_and_plural_id_fields() -> None:
+    models = [
+        DataModel(name="users", fields=[ModelField(name="id", type="integer")]),
+        DataModel(name="team", fields=[ModelField(name="userId", type="integer")]),
+        DataModel(name="project", fields=[ModelField(name="users_id", type="integer")]),
+    ]
+
+    relationships = infer_relationships(models)
+
+    assert ("team", "users") in relationships
+    assert ("project", "users") in relationships

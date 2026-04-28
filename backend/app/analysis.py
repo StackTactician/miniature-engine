@@ -7,7 +7,8 @@ from urllib.parse import urlparse
 
 from app.models import DataModel, ModelField, TrafficRecord
 
-_ID_LIKE_SEGMENT = re.compile(r"^\d+$|^[0-9a-fA-F]{8,}$")
+_ID_LIKE_SEGMENT = re.compile(r"^\d+$|^[0-9a-fA-F-]{8,}$")
+_CAMEL_ID_SUFFIX = re.compile(r"(.+?)(?:Id|IDs?)$")
 
 
 def _infer_type(value: Any) -> str:
@@ -92,12 +93,50 @@ def _model_name_from_url(url: str) -> str:
 def infer_relationships(models: list[DataModel]) -> list[tuple[str, str]]:
     model_names = {m.name for m in models}
     relationships: set[tuple[str, str]] = set()
+    lookup: dict[str, str] = {}
+
+    def _variants(name: str) -> set[str]:
+        variants = {name.lower()}
+        if name.endswith("s") and len(name) > 1:
+            variants.add(name[:-1].lower())
+        else:
+            variants.add(f"{name}s".lower())
+        return variants
+
+    for model_name in model_names:
+        for variant in _variants(model_name):
+            lookup.setdefault(variant, model_name)
+
+    def _resolve_candidate(raw_field_name: str) -> str | None:
+        candidates = [raw_field_name]
+
+        if raw_field_name.endswith("_id"):
+            candidates.append(raw_field_name[:-3])
+
+        camel_match = _CAMEL_ID_SUFFIX.fullmatch(raw_field_name)
+        if camel_match:
+            candidates.append(camel_match.group(1))
+
+        for candidate in candidates:
+            normalized = candidate.strip("_").lower()
+            if not normalized:
+                continue
+            direct = lookup.get(normalized)
+            if direct:
+                return direct
+            if normalized.endswith("s"):
+                singular = lookup.get(normalized[:-1])
+                if singular:
+                    return singular
+            plural = lookup.get(f"{normalized}s")
+            if plural:
+                return plural
+        return None
 
     for model in models:
         for field in model.fields:
-            if field.name.endswith("_id"):
-                candidate = field.name[:-3]
-                if candidate in model_names:
-                    relationships.add((model.name, candidate))
+            candidate = _resolve_candidate(field.name)
+            if candidate and candidate != model.name:
+                relationships.add((model.name, candidate))
 
     return sorted(relationships)
