@@ -125,5 +125,11 @@ def __getattr__(name: str) -> Any:
     if name == "ProberResult":
         from api_tool.prober.coordinator import ProberResult
         return ProberResult
+    if name == "ExportCoordinator":
+        from api_tool.exporter.coordinator import ExportCoordinator
+        return ExportCoordinator
+    if name == "ExportResult":
+        from api_tool.exporter.coordinator import ExportResult
+        return ExportResult
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

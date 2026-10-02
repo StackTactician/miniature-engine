@@ -150,7 +150,7 @@ class GraphQLQueryExtractor:
 
         # 3. fetch / axios / $fetch / ky calls targeting graphql or query endpoints
         fetch_pat = re.compile(
-            r"""\b(?:fetch|axios(?:\.(?:post|get|request))?|\$fetch|ky(?:\.(?:post|get))?)\s*\(\s*["'`](https?://[^"'`\s]+|/[^"'`\s]*)["'`]""",
+            r"""\b(?:fetch|axios(?:\.(?:post|get|request))?|\$fetch|ky(?:\.(?:post|get))?)\s*\(\s*["'`](https?://[^"'`\s]{1,2048}+|/[^"'`\s]{0,2048}+)["'`]""",
             re.IGNORECASE,
         )
         for m in fetch_pat.finditer(code):

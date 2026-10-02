@@ -1,0 +1,1612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  <title>MINIATURE ENGINE // API Discovery Tool</title>
+  <style>
+    /* ============================================================
+       LIGHT MODE ONLY - PURE MONOCHROME (BLACK & WHITE)
+       Mobile-First Responsive Layout
+       ============================================================ */
+    :root {
+      --bg: #ffffff;
+      --surface: #f7f7f7;
+      --surface-2: #eeeeee;
+      --border: #000000;
+      --border-subtle: #cccccc;
+      --border-light: #e2e2e2;
+      --text: #000000;
+      --text-muted: #555555;
+      --text-dim: #777777;
+      --highlight-bg: #000000;
+      --highlight-text: #ffffff;
+      --error-bg: #000000;
+      --error-text: #ffffff;
+      --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+      --touch-target: 44px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header */
+    header {
+      border-bottom: 2px solid var(--border);
+      padding: 10px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--bg);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .tag-engine {
+      border: 1px solid var(--border);
+      padding: 1px 5px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .header-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+    }
+
+    .status-badge {
+      padding: 3px 8px;
+      border: 1px solid var(--border);
+      text-transform: uppercase;
+      font-weight: 700;
+      font-size: 11px;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .status-badge.running {
+      background: var(--highlight-bg);
+      color: var(--highlight-text);
+      animation: pulse 1s infinite alternate;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 0.75; }
+      100% { opacity: 1.0; }
+    }
+
+    /* Control Panel */
+    .control-panel {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    .input-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    input[type="text"], input[type="number"], select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 12px;
+      font-family: var(--font-mono);
+      font-size: 14px; /* 16px on mobile prevents iOS/Android auto-zoom */
+      outline: none;
+      border-radius: 0;
+      min-height: var(--touch-target);
+    }
+
+    @media (max-width: 600px) {
+      input[type="text"], select {
+        font-size: 16px;
+      }
+    }
+
+    input[type="text"]:focus, input[type="number"]:focus, select:focus {
+      outline: 2px solid var(--border);
+    }
+
+    .url-input {
+      flex: 1 1 240px;
+      width: 100%;
+    }
+
+    .action-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      width: 100%;
+    }
+
+    button {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 8px 14px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      cursor: pointer;
+      font-weight: 700;
+      text-transform: uppercase;
+      border-radius: 0;
+      min-height: var(--touch-target);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.1s;
+    }
+
+    button:hover:not(:disabled) {
+      background: var(--highlight-bg);
+      color: var(--highlight-text);
+    }
+
+    button:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      border-color: var(--border-subtle);
+    }
+
+    button.primary {
+      background: var(--highlight-bg);
+      color: var(--highlight-text);
+      flex: 1 1 auto;
+    }
+
+    button.primary:hover:not(:disabled) {
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .btn-secondary {
+      flex: 1 1 auto;
+    }
+
+    /* Options Toggle & Content */
+    .options-toggle-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px dashed var(--border-subtle);
+    }
+
+    .toggle-btn {
+      padding: 4px 8px;
+      font-size: 11px;
+      min-height: 32px;
+    }
+
+    .options-panel {
+      display: none;
+      padding-top: 10px;
+    }
+
+    .options-panel.open {
+      display: block;
+    }
+
+    .presets-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 10px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .preset-btn {
+      padding: 4px 8px;
+      font-size: 11px;
+      min-height: 32px;
+    }
+
+    .options-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 8px 12px;
+      font-size: 12px;
+    }
+
+    .opt-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      user-select: none;
+      min-height: 32px;
+    }
+
+    .opt-label input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--text);
+      cursor: pointer;
+    }
+
+    .num-input-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .num-input-wrap input {
+      width: 50px;
+      padding: 4px 6px;
+      min-height: 30px;
+      font-size: 12px;
+    }
+
+    /* Mobile View Mode Switcher (Findings vs Logs) */
+    .mobile-view-nav {
+      display: none;
+      position: sticky;
+      top: 50px;
+      z-index: 90;
+      background: var(--bg);
+      border-bottom: 2px solid var(--border);
+    }
+
+    @media (max-width: 899px) {
+      .mobile-view-nav {
+        display: flex;
+        width: 100%;
+      }
+    }
+
+    .mobile-nav-btn {
+      flex: 1;
+      text-align: center;
+      padding: 10px;
+      background: var(--surface);
+      border: none;
+      border-right: 1px solid var(--border);
+      font-weight: 700;
+      font-size: 12px;
+      cursor: pointer;
+      min-height: var(--touch-target);
+    }
+
+    .mobile-nav-btn:last-child {
+      border-right: none;
+    }
+
+    .mobile-nav-btn.active {
+      background: var(--bg);
+      color: var(--text);
+      border-bottom: 3px solid var(--border);
+    }
+
+    /* Main Workspace */
+    .workspace {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      flex: 1;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    @media (max-width: 899px) {
+      .workspace {
+        display: block;
+        overflow: visible;
+      }
+      .pane {
+        display: none !important;
+        height: auto !important;
+        border-right: none !important;
+      }
+      .pane.mobile-active {
+        display: flex !important;
+      }
+    }
+
+    .pane {
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+      min-height: 0;
+      background: var(--bg);
+    }
+
+    .pane:last-child {
+      border-right: none;
+    }
+
+    .pane-header {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--surface);
+      font-weight: 700;
+      font-size: 12px;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .tabs {
+      display: flex;
+      overflow-x: auto;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      scrollbar-width: none;
+    }
+
+    .tabs::-webkit-scrollbar {
+      display: none;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      border-right: 1px solid var(--border-subtle);
+      padding: 8px 12px;
+      font-size: 11px;
+      color: var(--text-muted);
+      cursor: pointer;
+      text-transform: uppercase;
+      white-space: nowrap;
+      min-height: 38px;
+    }
+
+    .tab-btn:hover {
+      background: var(--surface-2);
+      color: var(--text);
+    }
+
+    .tab-btn.active {
+      background: var(--bg);
+      color: var(--text);
+      border-bottom: 2px solid var(--border);
+      font-weight: 800;
+    }
+
+    .pane-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 12px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* Summary Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(75px, 1fr));
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .stat-card {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      padding: 6px;
+      text-align: center;
+    }
+
+    .stat-val {
+      font-size: 16px;
+      font-weight: 800;
+    }
+
+    .stat-lbl {
+      font-size: 9px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      font-weight: 700;
+    }
+
+    /* Filter Bar */
+    .filter-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .filter-input {
+      flex: 1 1 160px;
+      padding: 6px 10px;
+      font-size: 12px;
+      min-height: 36px;
+    }
+
+    /* Table Container with Horizontal Touch Scroll */
+    .table-responsive {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      min-width: 480px;
+    }
+
+    th {
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      padding: 8px 10px;
+      font-size: 11px;
+      text-transform: uppercase;
+      font-weight: 700;
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    td {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border-light);
+      vertical-align: middle;
+      word-break: break-all;
+    }
+
+    tr:hover td {
+      background: var(--surface);
+    }
+
+    .method-badge {
+      display: inline-block;
+      padding: 1px 5px;
+      border: 1px solid var(--border);
+      font-size: 10px;
+      font-weight: 800;
+      background: var(--bg);
+    }
+
+    .status-code {
+      display: inline-block;
+      padding: 1px 6px;
+      border: 1px solid var(--border);
+      font-size: 11px;
+      font-weight: 700;
+      background: var(--surface);
+    }
+
+    .status-code.status-2xx {
+      background: var(--bg);
+      border: 1px solid var(--border);
+    }
+
+    .status-code.status-5xx {
+      background: var(--error-bg);
+      color: var(--error-text);
+    }
+
+    /* Logs Panel */
+    .logs-header-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .btn-copy-logs {
+      background: var(--highlight-bg) !important;
+      color: var(--highlight-text) !important;
+      border: 1px solid var(--border) !important;
+      font-weight: 800 !important;
+      padding: 6px 12px !important;
+      min-height: 36px !important;
+    }
+
+    .btn-copy-logs:active {
+      transform: scale(0.98);
+    }
+
+    .logs-container {
+      flex: 1;
+      min-height: 350px;
+      max-height: 80vh;
+      overflow-y: auto;
+      background: #fafafa;
+      border: 1px solid var(--border);
+      padding: 8px 10px;
+      font-size: 12px;
+      line-height: 1.45;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    @media (max-width: 899px) {
+      .logs-container {
+        min-height: 60vh;
+        max-height: none;
+      }
+    }
+
+    .log-row {
+      display: flex;
+      gap: 6px;
+      word-break: break-word;
+      white-space: pre-wrap;
+      padding: 2px 0;
+      border-bottom: 1px dotted var(--border-light);
+    }
+
+    .log-time {
+      color: var(--text-dim);
+      flex-shrink: 0;
+      user-select: none;
+      font-size: 11px;
+    }
+
+    .log-level {
+      flex-shrink: 0;
+      font-weight: 800;
+      padding: 0 4px;
+      border: 1px solid var(--border);
+      font-size: 9px;
+      line-height: 15px;
+      height: 17px;
+      text-transform: uppercase;
+      background: var(--bg);
+    }
+
+    .log-level.ERROR {
+      background: var(--error-bg);
+      color: var(--error-text);
+      border-color: var(--error-bg);
+    }
+
+    .log-level.WARNING {
+      background: var(--surface-2);
+      border-color: var(--border);
+    }
+
+    .log-msg {
+      flex: 1;
+      font-size: 12px;
+    }
+
+    .logs-footer {
+      padding: 8px 12px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: var(--text-muted);
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    /* Modal / Bottom Drawer for Mobile */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+      padding: 12px;
+    }
+
+    .modal-card {
+      background: var(--bg);
+      border: 2px solid var(--border);
+      width: 100%;
+      max-width: 760px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal-header {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--surface);
+    }
+
+    .modal-body {
+      padding: 14px;
+      overflow-y: auto;
+      flex: 1;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border-subtle);
+      padding: 10px;
+      overflow-x: auto;
+      font-size: 11px;
+      white-space: pre-wrap;
+    }
+
+    .empty-state {
+      padding: 30px 14px;
+      text-align: center;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header>
+    <div class="brand">
+      <span>MINIATURE ENGINE</span>
+      <span class="tag-engine">API TOOL</span>
+    </div>
+    <div class="header-status">
+      <span id="elapsedTimer">00:00</span>
+      <span id="statusBadge" class="status-badge">IDLE</span>
+    </div>
+  </header>
+
+  <!-- Controls Panel -->
+  <div class="control-panel">
+    <div class="input-row">
+      <input type="text" id="targetUrl" class="url-input" placeholder="Enter target URL (e.g., https://example.com or http://localhost:3000)" spellcheck="false" />
+    </div>
+
+    <div class="action-buttons">
+      <button type="button" id="btnStart" class="primary" onclick="startScan()">Start Scan</button>
+      <button type="button" id="btnStop" class="btn-secondary" onclick="stopScan()" disabled>Stop</button>
+      <button type="button" id="btnClear" class="btn-secondary" onclick="clearAll()">Clear</button>
+      <button type="button" id="btnExport" class="btn-secondary" onclick="exportJson()">Export JSON</button>
+    </div>
+
+    <div class="options-toggle-bar">
+      <span style="font-weight:700; font-size:11px;">SCAN SETTINGS:</span>
+      <button type="button" class="toggle-btn" id="btnToggleOptions" onclick="toggleOptions()">Options & Presets [ + ]</button>
+    </div>
+
+    <div id="optionsPanel" class="options-panel">
+      <div class="presets-row">
+        <span>PRESETS:</span>
+        <button type="button" class="preset-btn" onclick="applyPreset('full')">Full Discovery</button>
+        <button type="button" class="preset-btn" onclick="applyPreset('probe')">Prober Only</button>
+        <button type="button" class="preset-btn" onclick="applyPreset('static')">Static Only</button>
+        <button type="button" class="preset-btn" onclick="applyPreset('local')">Localhost/LAN</button>
+      </div>
+
+      <div class="options-grid">
+        <label class="opt-label">
+          <input type="checkbox" id="optCrawl" checked />
+          <span>Crawler</span>
+          <div class="num-input-wrap">
+            <span>D:</span><input type="number" id="optDepth" value="2" min="1" max="5" />
+            <span>P:</span><input type="number" id="optPages" value="30" min="1" max="200" />
+          </div>
+        </label>
+
+        <label class="opt-label">
+          <input type="checkbox" id="optManifest" checked />
+          <span>Framework Manifests (Next/Nuxt/Webpack)</span>
+        </label>
+
+        <label class="opt-label">
+          <input type="checkbox" id="optStatic" checked />
+          <span>Static JS & Source Maps</span>
+        </label>
+
+        <label class="opt-label">
+          <input type="checkbox" id="optSpecs" checked />
+          <span>OpenAPI / Swagger Specs</span>
+        </label>
+
+        <label class="opt-label">
+          <input type="checkbox" id="optGraphql" checked />
+          <span>GraphQL Services & Introspection</span>
+        </label>
+
+        <label class="opt-label">
+          <input type="checkbox" id="optHttp" checked />
+          <span>Safe HTTP Probing (OPTIONS/HEAD)</span>
+        </label>
+
+        <label class="opt-label">
+          <input type="checkbox" id="optPassive" />
+          <span>Passive OSINT (Wayback/AlienVault)</span>
+        </label>
+
+        <label class="opt-label">
+          <input type="checkbox" id="optPrivateIps" />
+          <span>Allow Private IPs / Localhost</span>
+        </label>
+
+        <div class="num-input-wrap" style="padding-top:4px;">
+          <span>Conc:</span><input type="number" id="optConcurrency" value="5" min="1" max="20" />
+          <span>Rate:</span><input type="number" id="optRateLimit" value="10" min="1" max="50" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile View Switcher (Visible on screens < 900px) -->
+  <div class="mobile-view-nav">
+    <button type="button" id="btnMobileFindings" class="mobile-nav-btn active" onclick="switchMobileView('findings')">
+      Findings (<span id="mobileCountEndpoints">0</span>)
+    </button>
+    <button type="button" id="btnMobileLogs" class="mobile-nav-btn" onclick="switchMobileView('logs')">
+      Logs Panel (<span id="mobileCountLogs">0</span>)
+    </button>
+  </div>
+
+  <!-- Main Workspace -->
+  <div class="workspace">
+    <!-- Left Pane: Findings -->
+    <div id="paneFindings" class="pane mobile-active">
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('endpoints')">Endpoints (<span id="countEndpoints">0</span>)</button>
+        <button class="tab-btn" onclick="switchTab('specs')">Specs (<span id="countSpecs">0</span>)</button>
+        <button class="tab-btn" onclick="switchTab('graphql')">GraphQL (<span id="countGraphql">0</span>)</button>
+        <button class="tab-btn" onclick="switchTab('configs')">Configs</button>
+        <button class="tab-btn" onclick="switchTab('scripts')">Scripts (<span id="countScripts">0</span>)</button>
+        <button class="tab-btn" onclick="switchTab('json')">JSON</button>
+      </div>
+
+      <div class="pane-content">
+        <!-- Quick Stats -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div id="statTotalEndpoints" class="stat-val">0</div>
+            <div class="stat-lbl">Endpoints</div>
+          </div>
+          <div class="stat-card">
+            <div id="statSpecs" class="stat-val">0</div>
+            <div class="stat-lbl">Specs</div>
+          </div>
+          <div class="stat-card">
+            <div id="statGraphql" class="stat-val">0</div>
+            <div class="stat-lbl">GraphQL</div>
+          </div>
+          <div class="stat-card">
+            <div id="statScripts" class="stat-val">0</div>
+            <div class="stat-lbl">Scripts</div>
+          </div>
+          <div class="stat-card">
+            <div id="statLive" class="stat-val">0</div>
+            <div class="stat-lbl">Live Probed</div>
+          </div>
+        </div>
+
+        <!-- Tab: Endpoints -->
+        <div id="tabContentEndpoints">
+          <div class="filter-bar">
+            <input type="text" id="endpointFilter" class="filter-input" placeholder="Filter path, method, status..." oninput="renderEndpoints()" />
+            <select id="endpointStatusFilter" onchange="renderEndpoints()" style="min-height:36px; padding:4px 8px;">
+              <option value="all">All</option>
+              <option value="live">Live</option>
+              <option value="2xx">2xx</option>
+              <option value="4xx">4xx</option>
+              <option value="5xx">5xx</option>
+            </select>
+          </div>
+          <div id="endpointsTableContainer">
+            <div class="empty-state">No endpoints discovered yet. Enter target URL and click Start Scan.</div>
+          </div>
+        </div>
+
+        <!-- Tab: Specs -->
+        <div id="tabContentSpecs" style="display:none;">
+          <div id="specsContainer">
+            <div class="empty-state">No OpenAPI / Swagger specifications found.</div>
+          </div>
+        </div>
+
+        <!-- Tab: GraphQL -->
+        <div id="tabContentGraphql" style="display:none;">
+          <div id="graphqlContainer">
+            <div class="empty-state">No GraphQL services or operations identified.</div>
+          </div>
+        </div>
+
+        <!-- Tab: Configs -->
+        <div id="tabContentConfigs" style="display:none;">
+          <div id="configsContainer">
+            <div class="empty-state">No client configs or environment variables extracted.</div>
+          </div>
+        </div>
+
+        <!-- Tab: Scripts -->
+        <div id="tabContentScripts" style="display:none;">
+          <div id="scriptsContainer">
+            <div class="empty-state">No scripts discovered.</div>
+          </div>
+        </div>
+
+        <!-- Tab: JSON -->
+        <div id="tabContentJson" style="display:none;">
+          <pre id="rawJsonBox">{}</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Pane: Logs & Feedback -->
+    <div id="paneLogs" class="pane">
+      <div class="pane-header">
+        <div>
+          <span>FEEDBACK & LOGS</span>
+          <span id="logCounter" style="color: var(--text-muted); font-size: 11px;">(0 lines)</span>
+        </div>
+        <div class="logs-header-actions">
+          <button type="button" id="btnCopyLogs" class="btn-copy-logs" onclick="copyAllLogs()">Copy All Logs</button>
+          <button type="button" onclick="clearLogs()" style="padding:4px 8px; min-height:36px;">CLEAR</button>
+        </div>
+      </div>
+
+      <div class="filter-bar" style="padding: 6px 12px; margin-bottom: 0; background: var(--surface); border-bottom: 1px solid var(--border);">
+        <input type="text" id="logSearch" class="filter-input" placeholder="Search logs/errors..." oninput="filterLogs()" />
+        <select id="logLevelFilter" onchange="filterLogs()" style="min-height:36px; padding:4px 8px;">
+          <option value="all">All Levels</option>
+          <option value="ERROR">Errors Only</option>
+          <option value="WARNING">Warnings & Errors</option>
+          <option value="INFO">Info & Higher</option>
+        </select>
+        <label class="opt-label" style="font-size: 11px;">
+          <input type="checkbox" id="optAutoScroll" checked />
+          <span>Auto-scroll</span>
+        </label>
+      </div>
+
+      <div id="logsContainer" class="logs-container">
+        <div class="log-row">
+          <span class="log-time">[--:--:--]</span>
+          <span class="log-level INFO">INFO</span>
+          <span class="log-msg">Ready. Logs, events, and error stack traces will appear here in real time.</span>
+        </div>
+      </div>
+
+      <div class="logs-footer">
+        <span id="logSummaryText">Stage: Idle</span>
+        <span>Tap "COPY ALL LOGS" to review later</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detail Modal -->
+  <div id="detailModal" class="modal-overlay" onclick="closeModal(event)">
+    <div class="modal-card" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <span id="modalTitle" style="font-weight:800; font-size:13px; word-break:break-all;">Endpoint Details</span>
+        <button type="button" onclick="closeModal()" style="min-height:32px; padding:4px 10px;">CLOSE</button>
+      </div>
+      <div id="modalBody" class="modal-body">
+        <!-- Injected details -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // State
+    let currentTab = 'endpoints';
+    let currentMobileView = 'findings';
+    let scanResults = null;
+    let scanStatus = 'idle';
+    let logsList = [];
+    let logOffset = 0;
+    let pollInterval = null;
+    let timerInterval = null;
+    let startTime = null;
+
+    // Mobile View Toggle
+    function switchMobileView(view) {
+      currentMobileView = view;
+      const findingsPane = document.getElementById('paneFindings');
+      const logsPane = document.getElementById('paneLogs');
+      const btnFindings = document.getElementById('btnMobileFindings');
+      const btnLogs = document.getElementById('btnMobileLogs');
+
+      if (view === 'findings') {
+        findingsPane.classList.add('mobile-active');
+        logsPane.classList.remove('mobile-active');
+        btnFindings.classList.add('active');
+        btnLogs.classList.remove('active');
+      } else {
+        findingsPane.classList.remove('mobile-active');
+        logsPane.classList.add('mobile-active');
+        btnFindings.classList.remove('active');
+        btnLogs.classList.add('active');
+      }
+    }
+
+    // Toggle Scan Options Panel
+    function toggleOptions() {
+      const panel = document.getElementById('optionsPanel');
+      const btn = document.getElementById('btnToggleOptions');
+      if (panel.classList.contains('open')) {
+        panel.classList.remove('open');
+        btn.innerText = 'Options & Presets [ + ]';
+      } else {
+        panel.classList.add('open');
+        btn.innerText = 'Options & Presets [ - ]';
+      }
+    }
+
+    // Presets
+    function applyPreset(name) {
+      if (name === 'full') {
+        document.getElementById('optCrawl').checked = true;
+        document.getElementById('optManifest').checked = true;
+        document.getElementById('optStatic').checked = true;
+        document.getElementById('optSpecs').checked = true;
+        document.getElementById('optGraphql').checked = true;
+        document.getElementById('optHttp').checked = true;
+        document.getElementById('optPassive').checked = false;
+        document.getElementById('optPrivateIps').checked = false;
+      } else if (name === 'probe') {
+        document.getElementById('optCrawl').checked = false;
+        document.getElementById('optManifest').checked = false;
+        document.getElementById('optStatic').checked = false;
+        document.getElementById('optSpecs').checked = true;
+        document.getElementById('optGraphql').checked = true;
+        document.getElementById('optHttp').checked = true;
+        document.getElementById('optPassive').checked = false;
+      } else if (name === 'static') {
+        document.getElementById('optCrawl').checked = true;
+        document.getElementById('optManifest').checked = true;
+        document.getElementById('optStatic').checked = true;
+        document.getElementById('optSpecs').checked = false;
+        document.getElementById('optGraphql').checked = false;
+        document.getElementById('optHttp').checked = false;
+      } else if (name === 'local') {
+        document.getElementById('optCrawl').checked = true;
+        document.getElementById('optManifest').checked = true;
+        document.getElementById('optStatic').checked = true;
+        document.getElementById('optSpecs').checked = true;
+        document.getElementById('optGraphql').checked = true;
+        document.getElementById('optHttp').checked = true;
+        document.getElementById('optPrivateIps').checked = true;
+      }
+    }
+
+    // Tabs
+    function switchTab(tabId) {
+      currentTab = tabId;
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      const buttons = document.querySelectorAll('.tab-btn');
+      const tabs = ['endpoints', 'specs', 'graphql', 'configs', 'scripts', 'json'];
+      const idx = tabs.indexOf(tabId);
+      if (idx !== -1 && buttons[idx]) buttons[idx].classList.add('active');
+
+      document.getElementById('tabContentEndpoints').style.display = tabId === 'endpoints' ? 'block' : 'none';
+      document.getElementById('tabContentSpecs').style.display = tabId === 'specs' ? 'block' : 'none';
+      document.getElementById('tabContentGraphql').style.display = tabId === 'graphql' ? 'block' : 'none';
+      document.getElementById('tabContentConfigs').style.display = tabId === 'configs' ? 'block' : 'none';
+      document.getElementById('tabContentScripts').style.display = tabId === 'scripts' ? 'block' : 'none';
+      document.getElementById('tabContentJson').style.display = tabId === 'json' ? 'block' : 'none';
+    }
+
+    // Actions
+    async function startScan() {
+      const urlInput = document.getElementById('targetUrl').value.trim();
+      if (!urlInput) {
+        alert('Please enter a target URL.');
+        return;
+      }
+
+      const options = {
+        crawl: document.getElementById('optCrawl').checked,
+        max_depth: parseInt(document.getElementById('optDepth').value, 10) || 2,
+        max_pages: parseInt(document.getElementById('optPages').value, 10) || 30,
+        manifest: document.getElementById('optManifest').checked,
+        static_analysis: document.getElementById('optStatic').checked,
+        probe: document.getElementById('optHttp').checked || document.getElementById('optSpecs').checked || document.getElementById('optGraphql').checked,
+        probe_specs: document.getElementById('optSpecs').checked,
+        probe_graphql: document.getElementById('optGraphql').checked,
+        probe_http: document.getElementById('optHttp').checked,
+        run_introspection: true,
+        passive_osint: document.getElementById('optPassive').checked,
+        allow_private_ips: document.getElementById('optPrivateIps').checked,
+        concurrency: parseInt(document.getElementById('optConcurrency').value, 10) || 5,
+        rate_limit: parseFloat(document.getElementById('optRateLimit').value) || 10.0
+      };
+
+      document.getElementById('btnStart').disabled = true;
+      document.getElementById('btnStop').disabled = false;
+      document.getElementById('statusBadge').innerText = 'RUNNING';
+      document.getElementById('statusBadge').className = 'status-badge running';
+
+      clearLogs();
+      logOffset = 0;
+      startTime = Date.now();
+      clearInterval(timerInterval);
+      timerInterval = setInterval(updateTimer, 1000);
+
+      // On mobile, auto-switch to logs so the user sees progress immediately
+      if (window.innerWidth < 900) {
+        switchMobileView('logs');
+      }
+
+      try {
+        const resp = await fetch('/api/scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: urlInput, options })
+        });
+        const data = await resp.json();
+        if (resp.status >= 400) {
+          alert('Error starting scan: ' + (data.error || 'Unknown error'));
+          resetScanState();
+          return;
+        }
+
+        startPolling();
+      } catch (e) {
+        alert('Failed to connect to backend: ' + e);
+        resetScanState();
+      }
+    }
+
+    async function stopScan() {
+      try {
+        await fetch('/api/stop', { method: 'POST' });
+        document.getElementById('statusBadge').innerText = 'STOPPING...';
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function clearAll() {
+      try {
+        await fetch('/api/clear', { method: 'POST' });
+      } catch (e) {}
+      scanResults = null;
+      scanStatus = 'idle';
+      logsList = [];
+      logOffset = 0;
+      resetScanState();
+      clearLogs();
+      updateCountBadges({ endpoints: 0, specs: 0, graphql: 0, scripts: 0, live: 0 });
+      renderEndpoints();
+      document.getElementById('specsContainer').innerHTML = '<div class="empty-state">No OpenAPI / Swagger specifications found.</div>';
+      document.getElementById('graphqlContainer').innerHTML = '<div class="empty-state">No GraphQL services or operations identified.</div>';
+      document.getElementById('configsContainer').innerHTML = '<div class="empty-state">No client configs or environment variables extracted.</div>';
+      document.getElementById('scriptsContainer').innerHTML = '<div class="empty-state">No scripts discovered.</div>';
+      document.getElementById('rawJsonBox').innerText = '{}';
+    }
+
+    function resetScanState() {
+      document.getElementById('btnStart').disabled = false;
+      document.getElementById('btnStop').disabled = true;
+      document.getElementById('statusBadge').className = 'status-badge';
+      document.getElementById('statusBadge').innerText = 'IDLE';
+      clearInterval(pollInterval);
+      clearInterval(timerInterval);
+    }
+
+    function updateTimer() {
+      if (!startTime) return;
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+      const s = String(elapsed % 60).padStart(2, '0');
+      document.getElementById('elapsedTimer').innerText = `${m}:${s}`;
+    }
+
+    // Polling Updates
+    function startPolling() {
+      clearInterval(pollInterval);
+      fetchUpdates();
+      pollInterval = setInterval(fetchUpdates, 600);
+    }
+
+    async function fetchUpdates() {
+      try {
+        const logsResp = await fetch(`/api/logs?offset=${logOffset}`);
+        if (logsResp.ok) {
+          const logsData = await logsResp.json();
+          if (logsData.logs && logsData.logs.length > 0) {
+            logsData.logs.forEach(appendLogRow);
+            logOffset = logsData.next_offset;
+          }
+        }
+
+        const statusResp = await fetch('/api/status');
+        if (statusResp.ok) {
+          const st = await statusResp.json();
+          scanStatus = st.status;
+          document.getElementById('statusBadge').innerText = st.status.toUpperCase();
+          document.getElementById('logSummaryText').innerText = `Stage: ${st.stage || 'idle'}`;
+
+          if (st.counts) {
+            updateCountBadges(st.counts);
+          }
+
+          if (st.summary && st.summary.live_endpoints !== undefined) {
+            document.getElementById('statLive').innerText = st.summary.live_endpoints;
+          }
+
+          if (st.status === 'completed' || st.status === 'stopped' || st.status === 'error') {
+            clearInterval(pollInterval);
+            clearInterval(timerInterval);
+            document.getElementById('btnStart').disabled = false;
+            document.getElementById('btnStop').disabled = true;
+            document.getElementById('statusBadge').className = 'status-badge';
+            fetchResults();
+          }
+        }
+      } catch (err) {
+        console.error('Update error:', err);
+      }
+    }
+
+    function updateCountBadges(counts) {
+      const ep = counts.endpoints || 0;
+      const sp = counts.specs || 0;
+      const gq = counts.graphql || 0;
+      const sc = counts.scripts || 0;
+
+      document.getElementById('countEndpoints').innerText = ep;
+      document.getElementById('mobileCountEndpoints').innerText = ep;
+      document.getElementById('countSpecs').innerText = sp;
+      document.getElementById('countGraphql').innerText = gq;
+      document.getElementById('countScripts').innerText = sc;
+
+      document.getElementById('statTotalEndpoints').innerText = ep;
+      document.getElementById('statSpecs').innerText = sp;
+      document.getElementById('statGraphql').innerText = gq;
+      document.getElementById('statScripts').innerText = sc;
+    }
+
+    async function fetchResults() {
+      try {
+        const resp = await fetch('/api/results');
+        if (resp.ok) {
+          scanResults = await resp.json();
+          renderAllResults();
+        }
+      } catch (e) {
+        console.error('Error fetching results:', e);
+      }
+    }
+
+    // Logs Rendering & Clipboard Copy
+    function appendLogRow(entry) {
+      logsList.push(entry);
+      document.getElementById('logCounter').innerText = `(${logsList.length} lines)`;
+      document.getElementById('mobileCountLogs').innerText = logsList.length;
+
+      const container = document.getElementById('logsContainer');
+      const search = document.getElementById('logSearch').value.toLowerCase();
+      const levelFilter = document.getElementById('logLevelFilter').value;
+
+      if (!shouldDisplayLog(entry, search, levelFilter)) return;
+
+      const row = document.createElement('div');
+      row.className = 'log-row';
+      row.innerHTML = `
+        <span class="log-time">[${escapeHtml(entry.time)}]</span>
+        <span class="log-level ${escapeHtml(entry.level)}">${escapeHtml(entry.level)}</span>
+        <span class="log-msg">${escapeHtml(entry.message)}</span>
+      `;
+      container.appendChild(row);
+
+      if (document.getElementById('optAutoScroll').checked) {
+        container.scrollTop = container.scrollHeight;
+      }
+    }
+
+    function shouldDisplayLog(entry, search, levelFilter) {
+      if (levelFilter === 'ERROR' && entry.level !== 'ERROR') return false;
+      if (levelFilter === 'WARNING' && entry.level !== 'WARNING' && entry.level !== 'ERROR') return false;
+      if (search && !entry.message.toLowerCase().includes(search) && !entry.logger.toLowerCase().includes(search)) return false;
+      return true;
+    }
+
+    function filterLogs() {
+      const container = document.getElementById('logsContainer');
+      container.innerHTML = '';
+      const search = document.getElementById('logSearch').value.toLowerCase();
+      const levelFilter = document.getElementById('logLevelFilter').value;
+
+      logsList.forEach(entry => {
+        if (shouldDisplayLog(entry, search, levelFilter)) {
+          const row = document.createElement('div');
+          row.className = 'log-row';
+          row.innerHTML = `
+            <span class="log-time">[${escapeHtml(entry.time)}]</span>
+            <span class="log-level ${escapeHtml(entry.level)}">${escapeHtml(entry.level)}</span>
+            <span class="log-msg">${escapeHtml(entry.message)}</span>
+          `;
+          container.appendChild(row);
+        }
+      });
+
+      if (document.getElementById('optAutoScroll').checked) {
+        container.scrollTop = container.scrollHeight;
+      }
+    }
+
+    function clearLogs() {
+      logsList = [];
+      document.getElementById('logsContainer').innerHTML = '';
+      document.getElementById('logCounter').innerText = '(0 lines)';
+      document.getElementById('mobileCountLogs').innerText = '0';
+    }
+
+    function copyAllLogs() {
+      if (logsList.length === 0) {
+        alert('Log buffer is currently empty.');
+        return;
+      }
+
+      const formattedText = logsList.map(l =>
+        `[${l.time}] [${l.level.padEnd(7, ' ')}] [${l.logger || 'api_tool'}] ${l.message}`
+      ).join('\n');
+
+      const btn = document.getElementById('btnCopyLogs');
+      const orig = btn.innerText;
+
+      function onCopied() {
+        btn.innerText = 'COPIED!';
+        setTimeout(() => { btn.innerText = orig; }, 2000);
+      }
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(formattedText).then(onCopied).catch(err => {
+          fallbackCopyText(formattedText, onCopied);
+        });
+      } else {
+        fallbackCopyText(formattedText, onCopied);
+      }
+    }
+
+    function fallbackCopyText(text, callback) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        callback();
+      } catch (err) {
+        alert('Please manually copy logs.');
+      }
+      document.body.removeChild(textarea);
+    }
+
+    // Results Rendering
+    function renderAllResults() {
+      if (!scanResults) return;
+      document.getElementById('rawJsonBox').innerText = JSON.stringify(scanResults, null, 2);
+      renderEndpoints();
+      renderSpecs();
+      renderGraphQL();
+      renderConfigs();
+      renderScripts();
+    }
+
+    function renderEndpoints() {
+      const container = document.getElementById('endpointsTableContainer');
+      const endpoints = (scanResults && scanResults.endpoints) || [];
+      if (endpoints.length === 0) {
+        container.innerHTML = '<div class="empty-state">No endpoints discovered yet.</div>';
+        return;
+      }
+
+      const query = document.getElementById('endpointFilter').value.toLowerCase();
+      const statusFilter = document.getElementById('endpointStatusFilter').value;
+
+      const filtered = endpoints.filter(ep => {
+        if (query) {
+          const matchPath = (ep.path || '').toLowerCase().includes(query);
+          const matchMethod = (ep.method || '').toLowerCase().includes(query);
+          const matchSource = (ep.source || '').toLowerCase().includes(query);
+          const matchStatus = String(ep.active_status || '').includes(query);
+          if (!matchPath && !matchMethod && !matchSource && !matchStatus) return false;
+        }
+
+        if (statusFilter === 'live') {
+          return ep.active_status && ep.active_status !== 404 && ep.active_status !== 0;
+        } else if (statusFilter === '2xx') {
+          return ep.active_status >= 200 && ep.active_status < 300;
+        } else if (statusFilter === '4xx') {
+          return ep.active_status >= 400 && ep.active_status < 500;
+        } else if (statusFilter === '5xx') {
+          return ep.active_status >= 500 && ep.active_status < 600;
+        }
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<div class="empty-state">No endpoints match the filter criteria.</div>';
+        return;
+      }
+
+      let html = `
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 65px;">Method</th>
+                <th>Path / Route</th>
+                <th style="width: 65px;">Status</th>
+                <th style="width: 75px;">Source</th>
+                <th style="width: 55px;">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      filtered.forEach((ep, idx) => {
+        let statusClass = '';
+        if (ep.active_status) {
+          if (ep.active_status >= 200 && ep.active_status < 300) statusClass = 'status-2xx';
+          else if (ep.active_status >= 500) statusClass = 'status-5xx';
+        }
+
+        html += `
+          <tr>
+            <td><span class="method-badge">${escapeHtml(ep.method || 'GET')}</span></td>
+            <td><strong>${escapeHtml(ep.path || '/')}</strong></td>
+            <td>${ep.active_status ? `<span class="status-code ${statusClass}">${ep.active_status}</span>` : '<span style="color:var(--text-dim);">-</span>'}</td>
+            <td><span style="color:var(--text-muted); font-size:11px;">${escapeHtml(ep.source || 'static')}</span></td>
+            <td><button type="button" style="padding: 4px 8px; font-size: 11px; min-height:30px;" onclick="viewEndpointDetails(${idx})">VIEW</button></td>
+          </tr>
+        `;
+      });
+
+      html += '</tbody></table></div>';
+      container.innerHTML = html;
+    }
+
+    function viewEndpointDetails(idx) {
+      if (!scanResults || !scanResults.endpoints || !scanResults.endpoints[idx]) return;
+      const ep = scanResults.endpoints[idx];
+      document.getElementById('modalTitle').innerText = `${ep.method || 'GET'} ${ep.path || '/'}`;
+
+      let body = `
+        <div style="margin-bottom: 12px; word-break: break-all;">
+          <strong>Full URL:</strong> <a href="${escapeHtml(ep.full_url || ep.path)}" target="_blank" style="color: #000; text-decoration: underline;">${escapeHtml(ep.full_url || ep.path)}</a>
+        </div>
+        <div style="margin-bottom: 12px;">
+          <strong>Source:</strong> ${escapeHtml(ep.source || 'static')} | <strong>Active Status:</strong> ${ep.active_status || 'Not probed'}
+        </div>
+      `;
+
+      if (ep.summary) {
+        body += `<div style="margin-bottom: 12px;"><strong>Summary:</strong> ${escapeHtml(ep.summary)}</div>`;
+      }
+      if (ep.description) {
+        body += `<div style="margin-bottom: 12px;"><strong>Description:</strong> ${escapeHtml(ep.description)}</div>`;
+      }
+
+      if (ep.parameters && ep.parameters.length > 0) {
+        body += `<h4>Parameters (${ep.parameters.length})</h4><div class="table-responsive" style="margin: 8px 0 16px 0;"><table><thead><tr><th>Name</th><th>Location</th><th>Type</th><th>Required</th><th>Example/Desc</th></tr></thead><tbody>`;
+        ep.parameters.forEach(p => {
+          body += `<tr><td><strong>${escapeHtml(p.name)}</strong></td><td>${escapeHtml(p.location || 'query')}</td><td>${escapeHtml(p.param_type || 'string')}</td><td>${p.required ? 'Yes' : 'No'}</td><td>${escapeHtml(p.example || p.description || '-')}</td></tr>`;
+        });
+        body += `</tbody></table></div>`;
+      }
+
+      if (ep.headers && Object.keys(ep.headers).length > 0) {
+        body += `<h4>Headers</h4><pre>${escapeHtml(JSON.stringify(ep.headers, null, 2))}</pre>`;
+      }
+
+      if (ep.request_body_schema || ep.request_body_sample) {
+        body += `<h4>Request Body</h4><pre>${escapeHtml(JSON.stringify(ep.request_body_schema || ep.request_body_sample, null, 2))}</pre>`;
+      }
+
+      document.getElementById('modalBody').innerHTML = body;
+      document.getElementById('detailModal').style.display = 'flex';
+    }
+
+    function renderSpecs() {
+      const container = document.getElementById('specsContainer');
+      const specs = (scanResults && scanResults.specs_detailed) || [];
+      if (specs.length === 0) {
+        container.innerHTML = '<div class="empty-state">No OpenAPI / Swagger specifications found.</div>';
+        return;
+      }
+
+      let html = `<div style="display:flex; flex-direction:column; gap:10px;">`;
+      specs.forEach((s, idx) => {
+        html += `
+          <div style="border: 1px solid var(--border); padding: 10px; background: var(--surface);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px;">
+              <div>
+                <span class="method-badge">${escapeHtml(s.spec_type || 'SPEC')}</span>
+                <strong style="margin-left:6px;">${escapeHtml(s.title || 'API Specification')}</strong>
+                ${s.version ? `<span style="color:var(--text-muted); font-size:11px;">(v${escapeHtml(s.version)})</span>` : ''}
+              </div>
+              <button type="button" style="padding:4px 8px; font-size:11px; min-height:30px;" onclick="viewRawSpec(${idx})">View Raw</button>
+            </div>
+            <div style="font-size:12px; color:var(--text-muted); word-break:break-all;">
+              URL: <a href="${escapeHtml(s.url)}" target="_blank" style="color:#000;">${escapeHtml(s.url)}</a>
+            </div>
+            <div style="margin-top:6px; font-size:11px;">
+              Extracted Endpoints: <strong>${s.endpoints ? s.endpoints.length : 0}</strong>
+            </div>
+          </div>
+        `;
+      });
+      html += `</div>`;
+      container.innerHTML = html;
+    }
+
+    function viewRawSpec(idx) {
+      const specs = (scanResults && scanResults.specs_detailed) || [];
+      if (!specs[idx]) return;
+      const s = specs[idx];
+      document.getElementById('modalTitle').innerText = `${s.title || 'Spec'} (${s.spec_type || 'OpenAPI'})`;
+      document.getElementById('modalBody').innerHTML = `<pre>${escapeHtml(JSON.stringify(s.raw_spec || s, null, 2))}</pre>`;
+      document.getElementById('detailModal').style.display = 'flex';
+    }
+
+    function renderGraphQL() {
+      const container = document.getElementById('graphqlContainer');
+      const gqlServices = (scanResults && scanResults.graphql_detailed) || [];
+      const gqlOps = (scanResults && scanResults.graphql_operations) || [];
+
+      if (gqlServices.length === 0 && gqlOps.length === 0) {
+        container.innerHTML = '<div class="empty-state">No GraphQL services or operations identified.</div>';
+        return;
+      }
+
+      let html = '';
+      if (gqlServices.length > 0) {
+        html += `<h4 style="margin-bottom:8px;">Active Services (${gqlServices.length})</h4><div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">`;
+        gqlServices.forEach(g => {
+          html += `
+            <div style="border:1px solid var(--border); padding:8px; background:var(--surface);">
+              <div><strong>Endpoint:</strong> ${escapeHtml(g.endpoint_url || '/graphql')}</div>
+              <div style="font-size:12px;">Active: <strong>${g.is_active ? 'Yes' : 'No'}</strong> | Introspection: <strong>${g.introspection_enabled ? 'Enabled' : 'Disabled'}</strong> ${g.detected_ui ? `| UI: <strong>${escapeHtml(g.detected_ui)}</strong>` : ''}</div>
+              ${g.schema_sdl ? `<div style="margin-top:6px;"><button type="button" style="padding:4px 8px; font-size:10px; min-height:28px;" onclick="viewGraphQLSdl('${encodeURIComponent(g.schema_sdl)}')">View Introspected SDL</button></div>` : ''}
+            </div>
+          `;
+        });
+        html += `</div>`;
+      }
+
+      if (gqlOps.length > 0) {
+        html += `<h4 style="margin-bottom:8px;">Extracted Queries & Mutations (${gqlOps.length})</h4><div style="display:flex; flex-direction:column; gap:8px;">`;
+        gqlOps.forEach(op => {
+          html += `
+            <div style="border:1px solid var(--border); padding:8px; background:var(--surface);">
+              <div><span class="method-badge">${escapeHtml(op.operation_type || 'query')}</span> <strong>${escapeHtml(op.operation_name || 'Anonymous')}</strong></div>
+              <pre style="margin-top:4px; max-height:120px; font-size:11px;">${escapeHtml(op.query_string || '')}</pre>
+            </div>
+          `;
+        });
+        html += `</div>`;
+      }
+
+      container.innerHTML = html;
+    }
+
+    function viewGraphQLSdl(encodedSdl) {
+      const sdl = decodeURIComponent(encodedSdl);
+      document.getElementById('modalTitle').innerText = 'Introspected GraphQL Schema (SDL)';
+      document.getElementById('modalBody').innerHTML = `<pre>${escapeHtml(sdl)}</pre>`;
+      document.getElementById('detailModal').style.display = 'flex';
+    }
+
+    function renderConfigs() {
+      const container = document.getElementById('configsContainer');
+      const configs = (scanResults && scanResults.metadata && scanResults.metadata.client_configs) || {};
+      const baseUrls = (scanResults && scanResults.base_urls) || [];
+
+      let html = '';
+      if (baseUrls.length > 0) {
+        html += `<div style="margin-bottom:12px;"><h4>Discovered API Base URLs</h4><ul style="padding-left:18px;">${baseUrls.map(u => `<li><code>${escapeHtml(u)}</code></li>`).join('')}</ul></div>`;
+      }
+
+      if (Object.keys(configs).length > 0) {
+        html += `<div><h4>Client Configs & Environment Identifiers</h4><pre>${escapeHtml(JSON.stringify(configs, null, 2))}</pre></div>`;
+      }
+
+      if (!html) {
+        html = '<div class="empty-state">No client configs or environment variables extracted.</div>';
+      }
+      container.innerHTML = html;
+    }
+
+    function renderScripts() {
+      const container = document.getElementById('scriptsContainer');
+      const scripts = (scanResults && scanResults.scripts_detailed) || [];
+      const sourcemaps = (scanResults && scanResults.sourcemaps_detailed) || [];
+
+      if (scripts.length === 0 && sourcemaps.length === 0) {
+        container.innerHTML = '<div class="empty-state">No scripts or source maps discovered.</div>';
+        return;
+      }
+
+      let html = '';
+      if (sourcemaps.length > 0) {
+        html += `<h4 style="margin-bottom:8px;">Source Maps (${sourcemaps.length})</h4><div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">`;
+        sourcemaps.forEach(sm => {
+          html += `
+            <div style="border:1px solid var(--border); padding:8px; background:var(--surface);">
+              <div><strong>JS:</strong> ${escapeHtml(sm.js_url || 'inline')}</div>
+              <div><strong>Map:</strong> ${escapeHtml(sm.map_url || 'inline')}</div>
+              <div style="color:var(--text-muted); font-size:11px;">Files: ${sm.files ? sm.files.length : 0} | Discovered endpoints: ${sm.endpoints ? sm.endpoints.length : 0}</div>
+            </div>
+          `;
+        });
+        html += `</div>`;
+      }
+
+      if (scripts.length > 0) {
+        html += `<h4 style="margin-bottom:8px;">JavaScript Bundles (${scripts.length})</h4><ul style="padding-left:18px; word-break:break-all;">`;
+        scripts.forEach(s => {
+          html += `<li><a href="${escapeHtml(s)}" target="_blank" style="color:#000;">${escapeHtml(s)}</a></li>`;
+        });
+        html += `</ul>`;
+      }
+
+      container.innerHTML = html;
+    }
+
+    function exportJson() {
+      if (!scanResults) {
+        alert('No scan results to export yet.');
+        return;
+      }
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(scanResults, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `api-tool-scan-${Date.now()}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    }
+
+    function closeModal() {
+      document.getElementById('detailModal').style.display = 'none';
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+  </script>
+</body>
+</html>

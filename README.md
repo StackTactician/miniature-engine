@@ -26,6 +26,14 @@ Miniature Engine explores web applications to map candidate API endpoints and sc
 python3 -m unittest discover tests/ -v
 ```
 
+## Running Web Testing Interface
+
+```bash
+python3 run_web.py --port=8000
+```
+Then open `http://127.0.0.1:8000` in your browser.
+
+
 ## License
 
 MIT
