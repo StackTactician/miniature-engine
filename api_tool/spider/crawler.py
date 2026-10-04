@@ -19,6 +19,17 @@ from bs4 import BeautifulSoup
 
 from api_tool.models import DiscoveredEndpoint, DiscoveredParameter
 from api_tool.spider.scope_resolver import CDNScopeResolver
+from api_tool.spider.filters import URLFilterEngine
+from api_tool.spider.priority_queue import (
+    PrioritizedRequest,
+    PriorityURLScheduler,
+    PurePythonBloomFilter,
+    URLScorer,
+)
+from api_tool.spider.passive_seed import PassiveSeedHarvester
+from api_tool.spider.extractors.dom_extractor import DOMExtractor
+from api_tool.spider.extractors.form_extractor import FormExtractor
+from api_tool.spider.extractors.hydration_extractor import FastHydrationScraper
 
 logger = logging.getLogger(__name__)
 
@@ -291,6 +302,10 @@ class CrawlResult:
     template_counts: Dict[str, int] = field(default_factory=dict)
     rate_limited_count: int = 0
     total_backoff_seconds: float = 0.0
+    forms: List[DiscoveredEndpoint] = field(default_factory=list)
+    hydration_endpoints: List[DiscoveredEndpoint] = field(default_factory=list)
+    passive_seeds: List[str] = field(default_factory=list)
+    disallowed_seeds: List[str] = field(default_factory=list)
 
 
 class AsyncSpider:
@@ -317,6 +332,17 @@ class AsyncSpider:
         custom_headers: Optional[Dict[str, str]] = None,
         client: Optional[httpx.AsyncClient] = None,
         scope_resolver: Optional[CDNScopeResolver] = None,
+        filter_engine: Optional[URLFilterEngine] = None,
+        include_regex: Optional[str] = None,
+        exclude_regex: Optional[str] = None,
+        block_dangerous_actions: bool = True,
+        block_rabbit_holes: bool = True,
+        allow_private_ips: bool = False,
+        crawl_forms: bool = True,
+        crawl_hydration: bool = True,
+        passive_seeds: bool = False,
+        bloom_capacity: int = 1_000_000,
+        bloom_fp_rate: float = 0.001,
     ) -> None:
         self.allowed_domains = allowed_domains or []
         self.scope_resolver = scope_resolver
@@ -332,8 +358,24 @@ class AsyncSpider:
         self.custom_headers = custom_headers or {}
         self._external_client = client
 
+        self.filter_engine = filter_engine
+        self.include_regex = include_regex
+        self.exclude_regex = exclude_regex
+        self.block_dangerous_actions = block_dangerous_actions
+        self.block_rabbit_holes = block_rabbit_holes
+        self.allow_private_ips = allow_private_ips
+        self.crawl_forms = crawl_forms
+        self.crawl_hydration = crawl_hydration
+        self.passive_seeds = passive_seeds
+        self.bloom_capacity = bloom_capacity
+        self.bloom_fp_rate = bloom_fp_rate
+
         self.normalizer = URLNormalizer()
         self.collapser = RoutePatternCollapser()
+        self.bloom_filter = PurePythonBloomFilter(
+            capacity=bloom_capacity, false_positive_rate=bloom_fp_rate
+        )
+        self.scheduler = PriorityURLScheduler(bloom_filter=self.bloom_filter)
 
     def _parse_retry_after(self, retry_after: Optional[str], default_delay: float = 1.0) -> float:
         """
@@ -474,6 +516,18 @@ class AsyncSpider:
             for d in self.allowed_domains:
                 self.scope_resolver.add_target_domain(d)
 
+        if self.filter_engine is None:
+            self.filter_engine = URLFilterEngine(
+                scope_resolver=self.scope_resolver,
+                include_regex=self.include_regex,
+                exclude_regex=self.exclude_regex,
+                block_dangerous_actions=self.block_dangerous_actions,
+                block_rabbit_holes=self.block_rabbit_holes,
+                allow_private_ips=self.allow_private_ips,
+            )
+        elif self.scope_resolver and self.filter_engine.scope_resolver is None:
+            self.filter_engine.scope_resolver = self.scope_resolver
+
         headers = {
             "User-Agent": self.user_agent,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/json;q=0.8,*/*;q=0.7",
@@ -487,13 +541,18 @@ class AsyncSpider:
         discovered_scripts: Set[str] = set()
         discovered_assets: Set[str] = set()
         discovered_endpoints: List[DiscoveredEndpoint] = []
+        discovered_forms: List[DiscoveredEndpoint] = []
+        discovered_hydration: List[DiscoveredEndpoint] = []
         template_counts: Dict[str, int] = defaultdict(int)
 
-        # Queue entries: (url, depth)
-        queue: asyncio.Queue[Tuple[str, int]] = asyncio.Queue()
+        # Fresh bloom filter and priority scheduler
+        self.bloom_filter.clear()
+        self.scheduler = PriorityURLScheduler(bloom_filter=self.bloom_filter)
+
+        self.bloom_filter.add(norm_start)
         start_template = self.collapser.collapse_url(norm_start)
         template_counts[start_template] += 1
-        await queue.put((norm_start, 0))
+        await self.scheduler.push(norm_start, depth=0, template=start_template, template_count=1, source_tag="start_url")
 
         client_provided = self._external_client is not None
         client = self._external_client or httpx.AsyncClient(
@@ -504,26 +563,88 @@ class AsyncSpider:
             limits=httpx.Limits(max_keepalive_connections=10, max_connections=self.concurrency),
         )
 
-        semaphore = asyncio.Semaphore(self.concurrency)
+        # Passive Seed Harvester phase
+        if self.passive_seeds:
+            try:
+                harvester = PassiveSeedHarvester(client=client, normalizer=self.normalizer)
+                passive_seeds_list, disallow_urls_list = await harvester.discover_seeds(
+                    norm_start, include_gateway_probes=False
+                )
+                result.passive_seeds = passive_seeds_list
+                result.disallowed_seeds = disallow_urls_list
 
+                # Disallow directives in robots.txt have high API discovery value (+75 score)
+                for dis_url in disallow_urls_list:
+                    if dis_url in self.bloom_filter or dis_url in queued_urls:
+                        continue
+                    if not self.filter_engine.should_crawl_page(dis_url):
+                        continue
+                    t = self.collapser.collapse_url(dis_url)
+                    if template_counts[t] >= self.max_per_template:
+                        continue
+                    template_counts[t] += 1
+                    queued_urls.add(dis_url)
+                    self.bloom_filter.add(dis_url)
+                    await self.scheduler.push(
+                        url=dis_url,
+                        depth=1,
+                        template=t,
+                        template_count=template_counts[t],
+                        is_disallowed_robots=True,
+                        source_tag="robots_disallow",
+                    )
+
+                # Sitemap and gateway probes
+                for seed_url in passive_seeds_list:
+                    if seed_url in self.bloom_filter or seed_url in queued_urls:
+                        continue
+                    if not self.filter_engine.should_crawl_page(seed_url):
+                        continue
+                    t = self.collapser.collapse_url(seed_url)
+                    if template_counts[t] >= self.max_per_template:
+                        continue
+                    template_counts[t] += 1
+                    queued_urls.add(seed_url)
+                    self.bloom_filter.add(seed_url)
+                    await self.scheduler.push(
+                        url=seed_url,
+                        depth=1,
+                        template=t,
+                        template_count=template_counts[t],
+                        source_tag="passive_seed",
+                    )
+            except Exception as passive_err:
+                logger.debug("Passive seed harvesting encountered an error: %s", passive_err)
+
+        semaphore = asyncio.Semaphore(self.concurrency)
         active_workers = 0
 
         async def worker() -> None:
             nonlocal active_workers
             while True:
+                if len(visited_urls) >= self.max_pages:
+                    break
+
                 try:
-                    url, depth = await asyncio.wait_for(queue.get(), timeout=0.05)
+                    req: PrioritizedRequest = await asyncio.wait_for(self.scheduler.pop(), timeout=0.05)
                 except asyncio.TimeoutError:
-                    if active_workers == 0:
+                    if active_workers == 0 and self.scheduler.empty():
                         break
                     continue
 
                 active_workers += 1
                 try:
+                    url = req.url
+                    depth = req.depth
+
                     if len(visited_urls) >= self.max_pages:
                         break
 
+                    if url in visited_urls:
+                        continue
+
                     visited_urls.add(url)
+                    self.bloom_filter.add(url)
 
                     async with semaphore:
                         try:
@@ -578,7 +699,6 @@ class AsyncSpider:
                     if parsed.query:
                         path_with_query += f"?{parsed.query}"
 
-                    # Extract query parameters for the model
                     query_params: List[DiscoveredParameter] = []
                     if parsed.query:
                         for q_key, q_val in parse_qsl(parsed.query, keep_blank_values=True):
@@ -611,22 +731,72 @@ class AsyncSpider:
                         for a in assets:
                             discovered_assets.add(a)
 
+                        # Deep DOM, Form, and Hydration extraction
+                        try:
+                            soup = BeautifulSoup(html_text, "html.parser")
+                        except Exception:
+                            soup = None
+
+                        dom_candidate_links: List[str] = []
+                        if soup is not None:
+                            # 1. DOMExtractor (multimedia, frames, data-*, htmx, comments)
+                            d_links, d_scripts, d_assets, htmx_eps = DOMExtractor.extract(soup, url)
+                            for s in d_scripts:
+                                if self.scope_resolver.is_asset_in_scope(s):
+                                    discovered_scripts.add(s)
+                            for a in d_assets:
+                                if self.scope_resolver.is_asset_in_scope(a):
+                                    discovered_assets.add(a)
+                            for lk in d_links:
+                                if not self.normalizer.is_static_asset(lk) and self.scope_resolver.is_page_in_scope(lk):
+                                    dom_candidate_links.append(lk)
+
+                            for h_url, h_verb in htmx_eps:
+                                p_h = urlsplit(h_url)
+                                h_base = f"{p_h.scheme}://{p_h.netloc}" if p_h.netloc else base_url
+                                ep = DiscoveredEndpoint(
+                                    path=p_h.path or "/",
+                                    method=h_verb,
+                                    base_url=h_base,
+                                    source="crawler",
+                                    tags=["htmx", h_verb.lower()],
+                                    summary=f"HTMX {h_verb} endpoint: {h_url}",
+                                )
+                                discovered_endpoints.append(ep)
+                                if h_verb == "GET" and self.scope_resolver.is_page_in_scope(h_url):
+                                    dom_candidate_links.append(h_url)
+
+                            # 2. FormExtractor (inputs, dummy payloads, method overrides)
+                            if self.crawl_forms:
+                                form_eps = FormExtractor.extract(soup, url)
+                                for f_ep in form_eps:
+                                    discovered_forms.append(f_ep)
+                                    discovered_endpoints.append(f_ep)
+                                    if f_ep.method == "GET" and f_ep.full_url:
+                                        if self.scope_resolver.is_page_in_scope(f_ep.full_url):
+                                            dom_candidate_links.append(f_ep.full_url)
+
+                        # 3. FastHydrationScraper (Next.js App/Pages, Nuxt 3, Remix, SvelteKit)
+                        if self.crawl_hydration:
+                            hydration_eps = FastHydrationScraper.extract_all(html_text, url)
+                            for hyd_ep in hydration_eps:
+                                discovered_hydration.append(hyd_ep)
+                                discovered_endpoints.append(hyd_ep)
+                                if hyd_ep.method == "GET" and hyd_ep.path and "{" not in hyd_ep.path:
+                                    hyd_url = urljoin(url, hyd_ep.path)
+                                    if self.scope_resolver.is_page_in_scope(hyd_url) and not self.normalizer.is_static_asset(hyd_url):
+                                        dom_candidate_links.append(hyd_url)
+
+                        all_candidate_links = list(dict.fromkeys(links + dom_candidate_links))
+
                         # Enqueue unvisited links if within depth and template limit
                         if depth + 1 <= self.max_depth:
-                            for link in links:
-                                if link in visited_urls or link in queued_urls:
+                            for link in all_candidate_links:
+                                if link in visited_urls or link in queued_urls or link in self.bloom_filter:
                                     continue
 
-                                # Scope check
-                                in_scope = (
-                                    self.scope_resolver.is_page_in_scope(link)
-                                    if self.scope_resolver
-                                    else any(
-                                        self.normalizer.is_same_domain(link, d)
-                                        for d in self.allowed_domains
-                                    )
-                                )
-                                if not in_scope:
+                                # Scope and safety filter check
+                                if not self.filter_engine.should_crawl_page(link):
                                     continue
 
                                 # Anti-loop check
@@ -640,11 +810,18 @@ class AsyncSpider:
 
                                 template_counts[link_template] += 1
                                 queued_urls.add(link)
-                                await queue.put((link, depth + 1))
+                                self.bloom_filter.add(link)
+                                await self.scheduler.push(
+                                    url=link,
+                                    depth=depth + 1,
+                                    template=link_template,
+                                    template_count=template_counts[link_template],
+                                    source_tag="crawler",
+                                )
 
                 finally:
                     active_workers -= 1
-                    queue.task_done()
+                    self.scheduler.task_done()
 
         try:
             workers = [asyncio.create_task(worker()) for _ in range(self.concurrency)]
@@ -653,7 +830,34 @@ class AsyncSpider:
             if not client_provided:
                 await client.aclose()
 
-        result.endpoints = discovered_endpoints
+        # Deduplicate endpoints by (method, base_url, path) and merge rich metadata
+        deduped_endpoints: Dict[Tuple[str, str, str], DiscoveredEndpoint] = {}
+        for ep in discovered_endpoints:
+            norm_path = ep.path or "/"
+            clean_base = ep.base_url.rstrip("/") if ep.base_url else ""
+            key = (ep.method.upper(), clean_base, norm_path)
+            if key not in deduped_endpoints:
+                deduped_endpoints[key] = ep
+            else:
+                existing = deduped_endpoints[key]
+                for tag in ep.tags:
+                    if tag not in existing.tags:
+                        existing.tags.append(tag)
+                if ep.headers:
+                    existing.headers.update(ep.headers)
+                if ep.request_body_sample and not existing.request_body_sample:
+                    existing.request_body_sample = ep.request_body_sample
+                existing_param_names = {p.name for p in existing.parameters}
+                for p in ep.parameters:
+                    if p.name not in existing_param_names:
+                        existing.parameters.append(p)
+                        existing_param_names.add(p.name)
+                if existing.active_status is None and ep.active_status is not None:
+                    existing.active_status = ep.active_status
+
+        result.endpoints = list(deduped_endpoints.values())
+        result.forms = discovered_forms
+        result.hydration_endpoints = discovered_hydration
         result.scripts = sorted(list(discovered_scripts))
         result.assets = sorted(list(discovered_assets))
         result.visited_urls = sorted(list(visited_urls))

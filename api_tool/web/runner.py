@@ -291,11 +291,19 @@ class ScanRunner:
         opt_concurrency = int(opts.get("concurrency", 5))
         opt_rate_limit = float(opts.get("rate_limit", 10.0))
 
+        opt_crawl_forms = opts.get("crawl_forms", True)
+        opt_crawl_hydration = opts.get("crawl_hydration", True)
+        opt_passive_seeds = opts.get("passive_seeds", False)
+        opt_block_dangerous = opts.get("block_dangerous_actions", True)
+        opt_block_rabbit = opts.get("block_rabbit_holes", True)
+        opt_include_regex = opts.get("include_regex")
+        opt_exclude_regex = opts.get("exclude_regex")
+
         self.add_log("INFO", f"Target configured: {norm_url} (Domain: {target_domain}, Base: {self.base_url})", "runner")
         self.add_log(
             "INFO",
-            f"Config: crawl={opt_crawl}(d={opt_depth},p={opt_pages}), manifest={opt_manifest}, "
-            f"static={opt_static}, probe={opt_probe}(specs={opt_specs},gql={opt_graphql},http={opt_http}), "
+            f"Config: crawl={opt_crawl}(d={opt_depth},p={opt_pages},forms={opt_crawl_forms},hydration={opt_crawl_hydration},seeds={opt_passive_seeds}), "
+            f"manifest={opt_manifest}, static={opt_static}, probe={opt_probe}(specs={opt_specs},gql={opt_graphql},http={opt_http}), "
             f"passive={opt_passive}, private_ips={opt_allow_private}",
             "runner",
         )
@@ -439,12 +447,21 @@ class ScanRunner:
                         max_pages=opt_pages,
                         concurrency=opt_concurrency,
                         client=client,
+                        crawl_forms=opt_crawl_forms,
+                        crawl_hydration=opt_crawl_hydration,
+                        passive_seeds=opt_passive_seeds,
+                        allow_private_ips=opt_allow_private,
+                        block_dangerous_actions=opt_block_dangerous,
+                        block_rabbit_holes=opt_block_rabbit,
+                        include_regex=opt_include_regex,
+                        exclude_regex=opt_exclude_regex,
                     )
                     crawl_res = await spider.crawl(norm_url)
                     self.add_log(
                         "INFO",
                         f"Crawler completed: {len(crawl_res.visited_urls)} pages visited, "
-                        f"{len(crawl_res.endpoints)} endpoints, {len(crawl_res.scripts)} scripts, {len(crawl_res.assets)} assets.",
+                        f"{len(crawl_res.endpoints)} endpoints ({len(crawl_res.forms)} forms, {len(crawl_res.hydration_endpoints)} hydration), "
+                        f"{len(crawl_res.scripts)} scripts, {len(crawl_res.assets)} assets.",
                         "crawler",
                     )
                     for ep in crawl_res.endpoints:

@@ -34,6 +34,8 @@ class HappyDOMEngine:
         html: str,
         scripts: Optional[List[str]] = None,
         timeout: float = 15.0,
+        interact: bool = True,
+        max_interactions: int = 30,
     ) -> Dict[str, Any]:
         """Evaluates HTML and optional scripts in a headless DOM environment.
 
@@ -42,12 +44,16 @@ class HappyDOMEngine:
             html: Raw HTML content of the page to evaluate.
             scripts: Optional list of additional JavaScript code strings to evaluate.
             timeout: Subprocess execution timeout in seconds (default 15.0).
+            interact: Whether to perform synthetic element interactions (default True).
+            max_interactions: Maximum number of synthetic interactions (default 30).
 
         Returns:
             Dictionary containing:
                 - 'rendered_html': Fully rendered HTML string.
                 - 'dynamic_endpoints': List of intercepted fetch / XHR dynamic calls.
                 - 'discovered_links': List of discovered <a href> link URLs.
+                - 'mutation_links': List of links extracted from DOM mutations.
+                - 'pushed_routes': List of client-side route transitions recorded.
                 - 'forms': List of discovered HTML forms with inputs.
                 - 'custom_elements': List of discovered Custom Element tag names.
 
@@ -69,6 +75,8 @@ class HappyDOMEngine:
             "url": url or "http://localhost",
             "html": html or "",
             "scripts": scripts if scripts is not None else [],
+            "interact": interact,
+            "max_interactions": max_interactions,
         }
 
         # Ensure NODE_PATH includes project root node_modules for robust resolution
@@ -121,6 +129,8 @@ class HappyDOMEngine:
                 "rendered_html": "",
                 "dynamic_endpoints": [],
                 "discovered_links": [],
+                "mutation_links": [],
+                "pushed_routes": [],
                 "forms": [],
                 "custom_elements": [],
             }
@@ -129,6 +139,13 @@ class HappyDOMEngine:
             parsed = json.loads(raw_output)
             if not isinstance(parsed, dict):
                 raise ValueError("Expected dictionary output from runner")
+            parsed.setdefault("rendered_html", "")
+            parsed.setdefault("dynamic_endpoints", [])
+            parsed.setdefault("discovered_links", [])
+            parsed.setdefault("mutation_links", [])
+            parsed.setdefault("pushed_routes", [])
+            parsed.setdefault("forms", [])
+            parsed.setdefault("custom_elements", [])
             return parsed
         except json.JSONDecodeError as json_err:
             raise RuntimeError(
