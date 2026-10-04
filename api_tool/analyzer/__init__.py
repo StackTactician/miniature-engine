@@ -22,7 +22,11 @@ try:
 except ImportError:
     JSRegexExtractor = None
 
+from api_tool.models import DiscoveredChunkManifest, PersistedQueryRecord
+from api_tool.analyzer.chunk_cracker import ChunkMapCracker
 from api_tool.analyzer.graphql_parser import GraphQLQueryExtractor
+from api_tool.analyzer.apq_extractor import APQOperationExtractor
+from api_tool.analyzer.ast_parser import JSASTExtractor
 from api_tool.analyzer.coordinator import StaticAnalyzer, StaticAnalysisResult
 
 __all__ = [
@@ -34,6 +38,11 @@ __all__ = [
     "GraphQLQueryExtractor",
     "StaticAnalyzer",
     "StaticAnalysisResult",
+    "ChunkMapCracker",
+    "DiscoveredChunkManifest",
+    "APQOperationExtractor",
+    "PersistedQueryRecord",
+    "JSASTExtractor",
 ]
 if JSRegexExtractor is not None:
     __all__.append("JSRegexExtractor")

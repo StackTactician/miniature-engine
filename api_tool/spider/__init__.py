@@ -23,15 +23,21 @@ from api_tool.spider.passive import (
     PassiveHarvester,
     PassiveHarvestResult,
 )
+from api_tool.spider.scope_resolver import (
+    CDNScopeResolver,
+    ScopePolicy,
+)
 
 __all__ = [
     "AsyncSpider",
+    "CDNScopeResolver",
     "CrawlResult",
     "DiscoveredAsset",
-    "RoutePatternCollapser",
-    "URLNormalizer",
     "ManifestExtractor",
     "ManifestResult",
     "PassiveHarvester",
     "PassiveHarvestResult",
+    "RoutePatternCollapser",
+    "ScopePolicy",
+    "URLNormalizer",
 ]

@@ -20,6 +20,17 @@ class DiscoveredParameter:
     def to_dict(self) -> Dict[str, Any]:
         return {k: v for k, v in asdict(self).items() if v is not None}
 
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "DiscoveredParameter":
+        return cls(
+            name=data.get("name", ""),
+            location=data.get("location", "query"),
+            required=bool(data.get("required", False)),
+            param_type=data.get("param_type", "string"),
+            example=data.get("example"),
+            description=data.get("description"),
+        )
+
 
 @dataclass
 class DiscoveredResponse:
@@ -31,6 +42,16 @@ class DiscoveredResponse:
 
     def to_dict(self) -> Dict[str, Any]:
         return {k: v for k, v in asdict(self).items() if v is not None}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "DiscoveredResponse":
+        return cls(
+            status_code=int(data.get("status_code", 200)),
+            content_type=data.get("content_type", "application/json"),
+            headers=dict(data.get("headers") or {}),
+            sample_body=data.get("sample_body"),
+            inferred_schema=data.get("inferred_schema"),
+        )
 
 
 @dataclass
@@ -62,6 +83,36 @@ class DiscoveredEndpoint:
         data["full_url"] = self.full_url
         return {k: v for k, v in data.items() if v is not None}
 
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "DiscoveredEndpoint":
+        raw_params = data.get("parameters") or []
+        params = [
+            DiscoveredParameter.from_dict(p) if isinstance(p, dict) else p
+            for p in raw_params
+        ]
+        raw_resps = data.get("responses") or []
+        resps = [
+            DiscoveredResponse.from_dict(r) if isinstance(r, dict) else r
+            for r in raw_resps
+        ]
+        return cls(
+            path=data.get("path", ""),
+            method=data.get("method", "GET"),
+            base_url=data.get("base_url", ""),
+            source=data.get("source", "static"),
+            tags=list(data.get("tags") or []),
+            parameters=params,
+            request_body_sample=data.get("request_body_sample"),
+            request_body_schema=data.get("request_body_schema"),
+            responses=resps,
+            auth_type=data.get("auth_type"),
+            auth_header_or_param=data.get("auth_header_or_param"),
+            summary=data.get("summary"),
+            description=data.get("description"),
+            active_status=data.get("active_status"),
+            headers=dict(data.get("headers") or {}),
+        )
+
 
 @dataclass
 class GraphQLOperation:
@@ -74,6 +125,63 @@ class GraphQLOperation:
     def to_dict(self) -> Dict[str, Any]:
         return {k: v for k, v in asdict(self).items() if v is not None}
 
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "GraphQLOperation":
+        return cls(
+            operation_type=data.get("operation_type", "query"),
+            operation_name=data.get("operation_name", ""),
+            query_string=data.get("query_string", ""),
+            endpoint=data.get("endpoint", "/graphql"),
+            variables_sample=data.get("variables_sample"),
+        )
+
+
+@dataclass
+class PersistedQueryRecord:
+    sha256_hash: str
+    operation_name: Optional[str] = None
+    query_string: Optional[str] = None
+    source: str = "apq_manifest"  # "apq_manifest", "network_har", "bundle_ast"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {k: v for k, v in asdict(self).items() if v is not None}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "PersistedQueryRecord":
+        return cls(
+            sha256_hash=data.get("sha256_hash") or data.get("sha256Hash") or data.get("id") or data.get("hash") or "",
+            operation_name=data.get("operation_name") or data.get("operationName") or data.get("name"),
+            query_string=data.get("query_string") or data.get("queryString") or data.get("text") or data.get("query") or data.get("body"),
+            source=data.get("source", "apq_manifest"),
+        )
+
+
+@dataclass
+class DiscoveredChunkManifest:
+    framework: str  # "webpack5", "webpack4", "vite", "nextjs", "unknown"
+    source_script: str = ""
+    base_url: str = ""
+    chunk_urls: List[str] = field(default_factory=list)
+    chunk_map: Dict[str, str] = field(default_factory=dict)
+    template: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> Dict[str, Any]:
+        data = asdict(self)
+        return {k: v for k, v in data.items() if v is not None}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "DiscoveredChunkManifest":
+        return cls(
+            framework=data.get("framework", "unknown"),
+            source_script=data.get("source_script", ""),
+            base_url=data.get("base_url", ""),
+            chunk_urls=list(data.get("chunk_urls", [])),
+            chunk_map=dict(data.get("chunk_map", {})),
+            template=data.get("template"),
+            metadata=dict(data.get("metadata", {})),
+        )
+
 
 @dataclass
 class ScanResult:
@@ -83,6 +191,7 @@ class ScanResult:
     graphql_operations: List[GraphQLOperation] = field(default_factory=list)
     discovered_specs: List[str] = field(default_factory=list)
     discovered_assets: List[str] = field(default_factory=list)
+    chunk_manifests: List[DiscoveredChunkManifest] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -93,14 +202,50 @@ class ScanResult:
             "graphql_operations": [g.to_dict() for g in self.graphql_operations],
             "discovered_specs": self.discovered_specs,
             "discovered_assets": self.discovered_assets,
+            "chunk_manifests": [c.to_dict() for c in self.chunk_manifests],
             "metadata": self.metadata,
         }
 
     def to_json(self, indent: int = 2) -> str:
         return json.dumps(self.to_dict(), indent=indent)
 
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ScanResult":
+        raw_eps = data.get("endpoints") or []
+        endpoints = [
+            DiscoveredEndpoint.from_dict(e) if isinstance(e, dict) else e
+            for e in raw_eps
+        ]
+        raw_gql = data.get("graphql_operations") or []
+        graphql_operations = [
+            GraphQLOperation.from_dict(g) if isinstance(g, dict) else g
+            for g in raw_gql
+        ]
+        raw_chunks = data.get("chunk_manifests") or []
+        chunk_manifests = [
+            DiscoveredChunkManifest.from_dict(c) if isinstance(c, dict) else c
+            for c in raw_chunks
+        ]
+        return cls(
+            target_url=data.get("target_url", ""),
+            base_urls=list(data.get("base_urls") or []),
+            endpoints=endpoints,
+            graphql_operations=graphql_operations,
+            discovered_specs=list(data.get("discovered_specs") or []),
+            discovered_assets=list(data.get("discovered_assets") or []),
+            chunk_manifests=chunk_manifests,
+            metadata=dict(data.get("metadata") or {}),
+        )
+
+    @classmethod
+    def from_json(cls, json_str: str) -> "ScanResult":
+        return cls.from_dict(json.loads(json_str))
+
 
 def __getattr__(name: str) -> Any:
+    if name == "HARImporter":
+        from api_tool.importer.har_importer import HARImporter
+        return HARImporter
     if name == "SourceMapFile":
         from api_tool.analyzer.sourcemap import SourceMapFile
         return SourceMapFile
@@ -128,8 +273,21 @@ def __getattr__(name: str) -> Any:
     if name == "ExportCoordinator":
         from api_tool.exporter.coordinator import ExportCoordinator
         return ExportCoordinator
+    if name == "ChunkMapCracker":
+        from api_tool.analyzer.chunk_cracker import ChunkMapCracker
+        return ChunkMapCracker
+    if name == "APQOperationExtractor":
+        from api_tool.analyzer.apq_extractor import APQOperationExtractor
+        return APQOperationExtractor
+    if name == "HappyDOMEngine":
+        from api_tool.runtime.dom_engine import HappyDOMEngine
+        return HappyDOMEngine
+    if name == "JSASTExtractor":
+        from api_tool.analyzer.ast_parser import JSASTExtractor
+        return JSASTExtractor
     if name == "ExportResult":
         from api_tool.exporter.coordinator import ExportResult
         return ExportResult
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 

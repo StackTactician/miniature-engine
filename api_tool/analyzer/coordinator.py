@@ -18,10 +18,12 @@ from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
-from api_tool.models import DiscoveredEndpoint, GraphQLOperation
+from api_tool.models import DiscoveredEndpoint, GraphQLOperation, DiscoveredChunkManifest
 from api_tool.analyzer.sourcemap import SourceMapResult, SourceMapUnpacker
 from api_tool.analyzer.js_regex import JSRegexExtractor
 from api_tool.analyzer.graphql_parser import GraphQLQueryExtractor
+from api_tool.analyzer.ast_parser import JSASTExtractor
+from api_tool.analyzer.chunk_cracker import ChunkMapCracker
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +36,7 @@ class StaticAnalysisResult:
     base_urls: List[str] = field(default_factory=list)
     source_map_results: List[SourceMapResult] = field(default_factory=list)
     client_configs: Dict[str, Any] = field(default_factory=dict)
+    chunk_manifests: List[DiscoveredChunkManifest] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -42,6 +45,7 @@ class StaticAnalysisResult:
             "base_urls": list(self.base_urls),
             "source_map_results": [s.to_dict() for s in self.source_map_results],
             "client_configs": dict(self.client_configs),
+            "chunk_manifests": [c.to_dict() for c in self.chunk_manifests],
         }
 
     def to_json(self, indent: int = 2) -> str:
@@ -65,6 +69,8 @@ class StaticAnalyzer:
         self.js_extractor = JSRegexExtractor()
         self.graphql_extractor = GraphQLQueryExtractor()
         self.sourcemap_unpacker = SourceMapUnpacker(request_timeout=request_timeout)
+        self.ast_extractor = JSASTExtractor()
+        self.chunk_cracker = ChunkMapCracker()
 
     @staticmethod
     def _merge_client_configs(c1: Dict[str, Any], c2: Dict[str, Any]) -> Dict[str, Any]:
@@ -198,6 +204,7 @@ class StaticAnalyzer:
         client_configs: Dict[str, Any],
         source_map_results: List[SourceMapResult],
         base_url: str = "",
+        chunk_manifests: Optional[List[DiscoveredChunkManifest]] = None,
     ) -> StaticAnalysisResult:
         """
         Resolves relative endpoints against discovered base URLs if base_url is present,
@@ -240,12 +247,23 @@ class StaticAnalyzer:
         deduped_graphql = self._deduplicate_graphql(graphql_ops)
         deduped_sourcemaps = self._deduplicate_sourcemaps(source_map_results)
 
+        # Deduplicate chunk manifests
+        deduped_manifests: List[DiscoveredChunkManifest] = []
+        seen_manifests: Set[Tuple[str, str, int]] = set()
+        if chunk_manifests:
+            for m in chunk_manifests:
+                key = (m.framework, m.source_script, len(m.chunk_urls))
+                if key not in seen_manifests:
+                    seen_manifests.add(key)
+                    deduped_manifests.append(m)
+
         return StaticAnalysisResult(
             endpoints=deduped_endpoints,
             graphql_operations=deduped_graphql,
             base_urls=resolved_base_urls,
             source_map_results=deduped_sourcemaps,
             client_configs=client_configs,
+            chunk_manifests=deduped_manifests,
         )
 
     def analyze_code(
@@ -256,14 +274,15 @@ class StaticAnalyzer:
     ) -> StaticAnalysisResult:
         """
         Synchronously analyzes JavaScript code:
-        1. Extracts endpoints using JSRegexExtractor.extract_endpoints(js_code, base_url).
-        2. Extracts client configs using JSRegexExtractor.extract_client_configs(js_code).
-        3. Extracts Server Actions using JSRegexExtractor.extract_server_actions(js_code).
-        4. Extracts GraphQL operations using GraphQLQueryExtractor.extract_from_code(js_code).
-        5. Checks for inline source map using SourceMapUnpacker.extract_from_js(js_code, script_url or base_url).
+        1. Extracts endpoints using JSRegexExtractor and compulsory Tree-sitter JSASTExtractor.
+        2. Extracts client configs using JSRegexExtractor and JSASTExtractor.
+        3. Extracts Server Actions using JSRegexExtractor and JSASTExtractor.
+        4. Extracts GraphQL operations using GraphQLQueryExtractor.
+        5. Cracks dynamic chunk manifests using ChunkMapCracker.
+        6. Checks for inline source map using SourceMapUnpacker.
            If inline map present, unpacks original files and analyzes them too.
-        6. Resolves relative endpoints against discovered base URLs if base_url is present.
-        7. Deduplicates endpoints and GraphQL operations.
+        7. Resolves relative endpoints against discovered base URLs if base_url is present.
+        8. Deduplicates endpoints and GraphQL operations.
         """
         if not js_code or not isinstance(js_code, str):
             return StaticAnalysisResult()
@@ -271,20 +290,37 @@ class StaticAnalyzer:
         endpoints: List[DiscoveredEndpoint] = []
         graphql_ops: List[GraphQLOperation] = []
         source_map_results: List[SourceMapResult] = []
+        chunk_manifests: List[DiscoveredChunkManifest] = []
 
-        # 1. Extract endpoints
+        # 1. Extract regex endpoints and configs
         endpoints.extend(self.js_extractor.extract_endpoints(js_code, base_url))
-
-        # 2. Extract client configs
         client_configs = self.js_extractor.extract_client_configs(js_code)
-
-        # 3. Extract Server Actions
         endpoints.extend(self.js_extractor.extract_server_actions(js_code))
-
-        # 4. Extract GraphQL operations
         graphql_ops.extend(self.graphql_extractor.extract_from_code(js_code))
 
-        # 5. Check for inline source map
+        # 2. Extract AST endpoints, server actions, and configs (compulsory Tree-sitter)
+        try:
+            ast_data = self.ast_extractor.extract_all(js_code, base_url=base_url)
+            if ast_data.get("endpoints"):
+                endpoints.extend(ast_data["endpoints"])
+            if ast_data.get("client_configs"):
+                client_configs = self._merge_client_configs(client_configs, ast_data["client_configs"])
+        except Exception as e:
+            logger.warning("Error running AST extractor on code: %s", e)
+
+        # 3. Crack dynamic chunks (Webpack/Vite/Next.js)
+        try:
+            manifests = self.chunk_cracker.crack_all_manifests(
+                content=js_code,
+                base_asset_url=script_url or base_url,
+                source_script=script_url,
+            )
+            if manifests:
+                chunk_manifests.extend(manifests)
+        except Exception as e:
+            logger.warning("Error cracking chunk maps: %s", e)
+
+        # 4. Check for inline source map
         ref = self.sourcemap_unpacker.extract_from_js(js_code, script_url or base_url)
         if ref and ref.is_inline and ref.inline_json:
             sm_result = self.sourcemap_unpacker.extract_from_json(
@@ -312,13 +348,23 @@ class StaticAnalyzer:
                     graphql_ops.extend(sub_gql)
                     client_configs = self._merge_client_configs(client_configs, sub_configs)
 
-        # 6 & 7. Resolve relative endpoints and deduplicate
+                    try:
+                        sub_ast = self.ast_extractor.extract_all(file_entry.content, base_url=base_url)
+                        if sub_ast.get("endpoints"):
+                            endpoints.extend(sub_ast["endpoints"])
+                        if sub_ast.get("client_configs"):
+                            client_configs = self._merge_client_configs(client_configs, sub_ast["client_configs"])
+                    except Exception as e:
+                        logger.debug("Error running AST extractor on sourcemap file %s: %s", file_entry.path, e)
+
+        # 5. Resolve relative endpoints and deduplicate
         return self._finalize_result(
             endpoints=endpoints,
             graphql_ops=graphql_ops,
             client_configs=client_configs,
             source_map_results=source_map_results,
             base_url=base_url,
+            chunk_manifests=chunk_manifests,
         )
 
     async def analyze_script(
@@ -331,6 +377,7 @@ class StaticAnalyzer:
         Asynchronously fetches script_url:
         - Proactively checks/unpacks source maps via SourceMapUnpacker.fetch_and_unpack.
         - Analyzes both the JS bundle and all unpacked original sourcesContent files.
+        - Cracks Webpack/Vite/Next.js chunk manifests.
         """
         if not script_url or not isinstance(script_url, str):
             return StaticAnalysisResult()
@@ -366,14 +413,37 @@ class StaticAnalyzer:
             endpoints: List[DiscoveredEndpoint] = []
             graphql_ops: List[GraphQLOperation] = []
             source_map_results: List[SourceMapResult] = []
+            chunk_manifests: List[DiscoveredChunkManifest] = []
 
-            # 1. Analyze JS bundle
+            # 1. Analyze JS bundle with regex
             endpoints.extend(self.js_extractor.extract_endpoints(js_content, base_url))
             client_configs = self.js_extractor.extract_client_configs(js_content)
             endpoints.extend(self.js_extractor.extract_server_actions(js_content))
             graphql_ops.extend(self.graphql_extractor.extract_from_code(js_content))
 
-            # 2. Check source map result
+            # 2. Analyze JS bundle with AST extractor
+            try:
+                ast_data = self.ast_extractor.extract_all(js_content, base_url=base_url)
+                if ast_data.get("endpoints"):
+                    endpoints.extend(ast_data["endpoints"])
+                if ast_data.get("client_configs"):
+                    client_configs = self._merge_client_configs(client_configs, ast_data["client_configs"])
+            except Exception as e:
+                logger.warning("Error running AST extractor on %s: %s", script_url, e)
+
+            # 3. Crack dynamic chunks
+            try:
+                manifests = self.chunk_cracker.crack_all_manifests(
+                    content=js_content,
+                    base_asset_url=script_url or base_url,
+                    source_script=script_url,
+                )
+                if manifests:
+                    chunk_manifests.extend(manifests)
+            except Exception as e:
+                logger.warning("Error cracking chunk maps from %s: %s", script_url, e)
+
+            # 4. Check source map result
             if sm_result and (sm_result.discovery_source != "none" or sm_result.files):
                 source_map_results.append(sm_result)
                 if sm_result.endpoints:
@@ -392,12 +462,22 @@ class StaticAnalyzer:
                         graphql_ops.extend(sub_gql)
                         client_configs = self._merge_client_configs(client_configs, sub_configs)
 
+                        try:
+                            sub_ast = self.ast_extractor.extract_all(file_entry.content, base_url=base_url)
+                            if sub_ast.get("endpoints"):
+                                endpoints.extend(sub_ast["endpoints"])
+                            if sub_ast.get("client_configs"):
+                                client_configs = self._merge_client_configs(client_configs, sub_ast["client_configs"])
+                        except Exception as e:
+                            logger.debug("Error running AST extractor on sourcemap file %s: %s", file_entry.path, e)
+
             return self._finalize_result(
                 endpoints=endpoints,
                 graphql_ops=graphql_ops,
                 client_configs=client_configs,
                 source_map_results=source_map_results,
                 base_url=base_url,
+                chunk_manifests=chunk_manifests,
             )
         finally:
             if close_client:
@@ -412,7 +492,7 @@ class StaticAnalyzer:
     ) -> StaticAnalysisResult:
         """
         Analyzes multiple script URLs concurrently with semaphore bounding.
-        Aggregates and deduplicates all endpoints, GraphQL operations, and base URLs.
+        Aggregates and deduplicates all endpoints, GraphQL operations, base URLs, and chunk manifests.
         """
         if not script_urls:
             return StaticAnalysisResult()
@@ -424,6 +504,7 @@ class StaticAnalyzer:
         all_graphql: List[GraphQLOperation] = []
         all_source_maps: List[SourceMapResult] = []
         all_client_configs: Dict[str, Any] = {}
+        all_chunk_manifests: List[DiscoveredChunkManifest] = []
 
         close_client = False
         c = client
@@ -453,6 +534,7 @@ class StaticAnalyzer:
                     all_graphql.extend(res.graphql_operations)
                     all_source_maps.extend(res.source_map_results)
                     all_client_configs = self._merge_client_configs(all_client_configs, res.client_configs)
+                    all_chunk_manifests.extend(res.chunk_manifests)
 
             return self._finalize_result(
                 endpoints=all_endpoints,
@@ -460,6 +542,7 @@ class StaticAnalyzer:
                 client_configs=all_client_configs,
                 source_map_results=all_source_maps,
                 base_url=base_url,
+                chunk_manifests=all_chunk_manifests,
             )
         finally:
             if close_client:

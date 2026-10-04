@@ -161,6 +161,77 @@ class APIToolHandler(http.server.BaseHTTPRequestHandler):
                 pass
             return
 
+        if path == "/api/export/openapi":
+            fmt = query.get("format", ["json"])[0].lower()
+            try:
+                from api_tool.exporter.openapi_gen import OpenAPIGenerator
+                servers = [self.server_runner.target_url] if self.server_runner.target_url else None
+                gen = OpenAPIGenerator(
+                    endpoints=self.server_runner.endpoints,
+                    title=f"Discovered API - {self.server_runner.target_url or 'Miniature Engine'}",
+                    servers=servers,
+                )
+                if fmt in ("yaml", "yml"):
+                    content = gen.to_yaml().encode("utf-8")
+                    content_type = "application/x-yaml; charset=utf-8"
+                    filename = "openapi.yaml"
+                else:
+                    content = gen.to_json(indent=2).encode("utf-8")
+                    content_type = "application/json; charset=utf-8"
+                    filename = "openapi.json"
+
+                self.send_response(200)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+                self.send_header("Content-Length", str(len(content)))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(content)
+            except Exception as e:
+                self._send_error(f"Failed to generate OpenAPI export: {e}", status=500)
+            return
+
+        if path == "/api/export/postman":
+            try:
+                from api_tool.exporter.postman_gen import PostmanExporter
+                exporter = PostmanExporter()
+                col = exporter.export_from_endpoints(
+                    endpoints=self.server_runner.endpoints,
+                    collection_name=f"Miniature Engine - {self.server_runner.target_url or 'Discovered'}",
+                    base_url=self.server_runner.target_url or "http://localhost:3000",
+                    graphql_operations=self.server_runner.graphql_operations,
+                )
+                content = col.to_json(indent=2).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Disposition", 'attachment; filename="postman_collection.json"')
+                self.send_header("Content-Length", str(len(content)))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(content)
+            except Exception as e:
+                self._send_error(f"Failed to generate Postman export: {e}", status=500)
+            return
+
+        if path == "/api/export/graphql":
+            try:
+                from api_tool.exporter.coordinator import synthesize_graphql_sdl_from_operations
+                sdl = synthesize_graphql_sdl_from_operations(
+                    self.server_runner.graphql_operations,
+                    title=f"Discovered GraphQL - {self.server_runner.target_url or 'Miniature Engine'}"
+                )
+                content = sdl.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Disposition", 'attachment; filename="schema.graphql"')
+                self.send_header("Content-Length", str(len(content)))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(content)
+            except Exception as e:
+                self._send_error(f"Failed to generate GraphQL SDL export: {e}", status=500)
+            return
+
         self._send_error(f"Path not found: {path}", status=404)
 
     def do_POST(self) -> None:
@@ -213,6 +284,28 @@ class APIToolHandler(http.server.BaseHTTPRequestHandler):
         if path == "/api/clear":
             self.server_runner.clear()
             self._send_json({"cleared": True, "status": self.server_runner.status})
+            return
+
+        if path == "/api/import/har":
+            if self.server_runner.status == "running":
+                self._send_error("A scan is currently running. Stop it before importing.", status=409)
+                return
+
+            try:
+                from api_tool.importer.har_importer import HARImporter
+                importer = HARImporter()
+                har_content = payload.get("har", payload)
+                scan_res = importer.import_json(har_content)
+                self.server_runner.load_from_scan_result(scan_res)
+                self._send_json({
+                    "message": "HAR successfully imported",
+                    "target_url": scan_res.target_url,
+                    "endpoints_count": len(scan_res.endpoints),
+                    "graphql_count": len(scan_res.graphql_operations),
+                    "status": "completed",
+                })
+            except Exception as e:
+                self._send_error(f"Failed to import HAR: {e}", status=400)
             return
 
         self._send_error(f"Unknown API endpoint: {path}", status=404)

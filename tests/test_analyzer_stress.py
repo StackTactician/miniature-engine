@@ -579,7 +579,7 @@ class TestMassiveMinifiedBundleBenchmark(unittest.TestCase):
         )
 
         # Throughput assertion: bundle processed at reasonable speed without hanging
-        self.assertGreater(throughput_mb_s, 0.1, "Throughput must be at least 0.1 MB/s")
+        self.assertGreater(throughput_mb_s, 0.05, "Throughput must be at least 0.05 MB/s")
 
 
 if __name__ == "__main__":

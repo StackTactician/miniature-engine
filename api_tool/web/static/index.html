@@ -3,24 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
-  <title>MINIATURE ENGINE // API Discovery Tool</title>
+  <title>MINIATURE ENGINE // API Discovery & Reverse Engineering Tool</title>
   <style>
     /* ============================================================
-       LIGHT MODE ONLY - PURE MONOCHROME (BLACK & WHITE)
+       LIGHT MODE ONLY - PURE MONOCHROME (HIGH-CONTRAST DEVTOOLS)
        Mobile-First Responsive Layout
        ============================================================ */
     :root {
       --bg: #ffffff;
       --surface: #f7f7f7;
       --surface-2: #eeeeee;
+      --surface-hover: #e8e8e8;
       --border: #000000;
       --border-subtle: #cccccc;
-      --border-light: #e2e2e2;
+      --border-light: #e4e4e4;
       --text: #000000;
       --text-muted: #555555;
       --text-dim: #777777;
       --highlight-bg: #000000;
       --highlight-text: #ffffff;
+      --tag-bg: #f0f0f0;
       --error-bg: #000000;
       --error-text: #ffffff;
       --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
@@ -45,7 +47,7 @@
       flex-direction: column;
     }
 
-    /* Header */
+    /* Top Header */
     header {
       border-bottom: 2px solid var(--border);
       padding: 10px 14px;
@@ -56,6 +58,8 @@
       position: sticky;
       top: 0;
       z-index: 100;
+      flex-wrap: wrap;
+      gap: 8px;
     }
 
     .brand {
@@ -80,6 +84,7 @@
       align-items: center;
       gap: 8px;
       font-size: 12px;
+      flex-wrap: wrap;
     }
 
     .status-badge {
@@ -96,6 +101,18 @@
       background: var(--highlight-bg);
       color: var(--highlight-text);
       animation: pulse 1s infinite alternate;
+    }
+
+    .waf-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 7px;
+      border: 1px solid var(--border);
+      font-size: 10px;
+      font-weight: 700;
+      background: var(--surface-2);
+      text-transform: uppercase;
     }
 
     @keyframes pulse {
@@ -117,25 +134,25 @@
       margin-bottom: 8px;
     }
 
-    input[type="text"], input[type="number"], select {
+    input[type="text"], input[type="number"], select, textarea {
       background: var(--bg);
       border: 1px solid var(--border);
       color: var(--text);
       padding: 10px 12px;
       font-family: var(--font-mono);
-      font-size: 14px; /* 16px on mobile prevents iOS/Android auto-zoom */
+      font-size: 14px;
       outline: none;
       border-radius: 0;
       min-height: var(--touch-target);
     }
 
     @media (max-width: 600px) {
-      input[type="text"], select {
+      input[type="text"], select, textarea {
         font-size: 16px;
       }
     }
 
-    input[type="text"]:focus, input[type="number"]:focus, select:focus {
+    input[type="text"]:focus, input[type="number"]:focus, select:focus, textarea:focus {
       outline: 2px solid var(--border);
     }
 
@@ -166,6 +183,7 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      gap: 6px;
       transition: all 0.1s;
     }
 
@@ -193,6 +211,54 @@
 
     .btn-secondary {
       flex: 1 1 auto;
+    }
+
+    /* Export Dropdown */
+    .dropdown {
+      position: relative;
+      display: inline-block;
+      flex: 1 1 auto;
+    }
+
+    .dropdown-content {
+      display: none;
+      position: absolute;
+      background: var(--bg);
+      min-width: 220px;
+      box-shadow: 0px 4px 10px rgba(0,0,0,0.15);
+      border: 2px solid var(--border);
+      z-index: 50;
+      right: 0;
+      top: 100%;
+      margin-top: 2px;
+    }
+
+    .dropdown-content a, .dropdown-content button {
+      color: var(--text);
+      padding: 10px 14px;
+      text-decoration: none;
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      border: none;
+      border-bottom: 1px solid var(--border-subtle);
+      width: 100%;
+      text-align: left;
+      background: var(--bg);
+      min-height: 38px;
+    }
+
+    .dropdown-content a:last-child, .dropdown-content button:last-child {
+      border-bottom: none;
+    }
+
+    .dropdown-content a:hover, .dropdown-content button:hover {
+      background: var(--highlight-bg);
+      color: var(--highlight-text);
+    }
+
+    .dropdown.show .dropdown-content {
+      display: block;
     }
 
     /* Options Toggle & Content */
@@ -238,7 +304,7 @@
 
     .options-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 8px 12px;
       font-size: 12px;
     }
@@ -315,7 +381,7 @@
     /* Main Workspace */
     .workspace {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1.15fr 0.85fr;
       flex: 1;
       overflow: hidden;
       min-height: 0;
@@ -408,7 +474,7 @@
     /* Summary Stats Grid */
     .stats-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(75px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
       gap: 6px;
       margin-bottom: 12px;
     }
@@ -459,7 +525,7 @@
       width: 100%;
       border-collapse: collapse;
       font-size: 12px;
-      min-width: 480px;
+      min-width: 520px;
     }
 
     th {
@@ -493,6 +559,45 @@
       font-size: 10px;
       font-weight: 800;
       background: var(--bg);
+    }
+
+    .badge-tag {
+      display: inline-block;
+      padding: 1px 5px;
+      border: 1px solid var(--border);
+      font-size: 9px;
+      font-weight: 700;
+      background: var(--surface-2);
+      text-transform: uppercase;
+      margin-right: 4px;
+    }
+
+    .badge-tag.ast {
+      background: #000;
+      color: #fff;
+    }
+
+    .badge-tag.action {
+      border: 1px dashed var(--border);
+      font-weight: 800;
+    }
+
+    .badge-tag.dom {
+      background: #e0e0e0;
+    }
+
+    .badge-tag.har {
+      border: 2px solid var(--border);
+    }
+
+    .badge-tag.chunk {
+      background: #333333;
+      color: #ffffff;
+    }
+
+    .path-param-highlight {
+      font-weight: 700;
+      text-decoration: underline;
     }
 
     .status-code {
@@ -596,6 +701,12 @@
       border-color: var(--border);
     }
 
+    .log-stage {
+      color: var(--text-muted);
+      font-size: 10px;
+      flex-shrink: 0;
+    }
+
     .log-msg {
       flex: 1;
       font-size: 12px;
@@ -619,7 +730,7 @@
       display: none;
       position: fixed;
       top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0, 0, 0, 0.6);
+      background: rgba(0, 0, 0, 0.65);
       z-index: 1000;
       justify-content: center;
       align-items: center;
@@ -630,7 +741,7 @@
       background: var(--bg);
       border: 2px solid var(--border);
       width: 100%;
-      max-width: 760px;
+      max-width: 820px;
       max-height: 90vh;
       display: flex;
       flex-direction: column;
@@ -667,6 +778,55 @@
       color: var(--text-muted);
       font-weight: 600;
     }
+
+    /* Drag & Drop HAR Area */
+    .dropzone {
+      border: 2px dashed var(--border);
+      background: var(--surface);
+      padding: 24px 16px;
+      text-align: center;
+      cursor: pointer;
+      margin-bottom: 14px;
+      transition: background 0.15s;
+    }
+
+    .dropzone:hover, .dropzone.dragover {
+      background: var(--surface-2);
+      border-color: var(--highlight-bg);
+    }
+
+    .dropzone-title {
+      font-weight: 800;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    .dropzone-sub {
+      color: var(--text-muted);
+      font-size: 11px;
+    }
+
+    /* Chunk cards */
+    .manifest-card {
+      border: 1px solid var(--border);
+      background: var(--surface);
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .manifest-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .manifest-title {
+      font-weight: 800;
+      font-size: 13px;
+    }
   </style>
 </head>
 <body>
@@ -675,9 +835,11 @@
   <header>
     <div class="brand">
       <span>MINIATURE ENGINE</span>
-      <span class="tag-engine">API TOOL</span>
+      <span class="tag-engine">API REVERSE TOOL</span>
     </div>
     <div class="header-status">
+      <span id="wafBadge" class="waf-badge" style="display:none;"></span>
+      <span id="stageBadge" class="waf-badge">STAGE: IDLE</span>
       <span id="elapsedTimer">00:00</span>
       <span id="statusBadge" class="status-badge">IDLE</span>
     </div>
@@ -693,27 +855,40 @@
       <button type="button" id="btnStart" class="primary" onclick="startScan()">Start Scan</button>
       <button type="button" id="btnStop" class="btn-secondary" onclick="stopScan()" disabled>Stop</button>
       <button type="button" id="btnClear" class="btn-secondary" onclick="clearAll()">Clear</button>
-      <button type="button" id="btnExport" class="btn-secondary" onclick="exportJson()">Export JSON</button>
+      <button type="button" id="btnImportHar" class="btn-secondary" onclick="openHarModal()">Import HAR</button>
+      
+      <!-- Export Dropdown -->
+      <div class="dropdown" id="exportDropdown">
+        <button type="button" style="width:100%;" onclick="toggleDropdown('exportDropdown')">Export ▼</button>
+        <div class="dropdown-content">
+          <button type="button" onclick="exportResultsJson()">Export Raw JSON</button>
+          <a href="/api/export/openapi?format=json" download="openapi.json" onclick="closeDropdowns()">OpenAPI 3.1.0 (JSON)</a>
+          <a href="/api/export/openapi?format=yaml" download="openapi.yaml" onclick="closeDropdowns()">OpenAPI 3.1.0 (YAML)</a>
+          <a href="/api/export/postman" download="postman_collection.json" onclick="closeDropdowns()">Postman Collection v2.1</a>
+          <a href="/api/export/graphql" download="schema.graphql" onclick="closeDropdowns()">Standalone GraphQL SDL</a>
+        </div>
+      </div>
     </div>
 
     <div class="options-toggle-bar">
-      <span style="font-weight:700; font-size:11px;">SCAN SETTINGS:</span>
+      <span style="font-weight:700; font-size:11px;">SCAN SETTINGS & ENGINE SUBSYSTEMS:</span>
       <button type="button" class="toggle-btn" id="btnToggleOptions" onclick="toggleOptions()">Options & Presets [ + ]</button>
     </div>
 
     <div id="optionsPanel" class="options-panel">
       <div class="presets-row">
         <span>PRESETS:</span>
-        <button type="button" class="preset-btn" onclick="applyPreset('full')">Full Discovery</button>
+        <button type="button" class="preset-btn" onclick="applyPreset('full')">Full Engine</button>
+        <button type="button" class="preset-btn" onclick="applyPreset('stealth')">Stealth / WAF</button>
+        <button type="button" class="preset-btn" onclick="applyPreset('static')">Static AST & Chunks</button>
         <button type="button" class="preset-btn" onclick="applyPreset('probe')">Prober Only</button>
-        <button type="button" class="preset-btn" onclick="applyPreset('static')">Static Only</button>
-        <button type="button" class="preset-btn" onclick="applyPreset('local')">Localhost/LAN</button>
+        <button type="button" class="preset-btn" onclick="applyPreset('local')">Localhost / Dev</button>
       </div>
 
       <div class="options-grid">
         <label class="opt-label">
           <input type="checkbox" id="optCrawl" checked />
-          <span>Crawler</span>
+          <span>Crawler & Spider</span>
           <div class="num-input-wrap">
             <span>D:</span><input type="number" id="optDepth" value="2" min="1" max="5" />
             <span>P:</span><input type="number" id="optPages" value="30" min="1" max="200" />
@@ -722,22 +897,32 @@
 
         <label class="opt-label">
           <input type="checkbox" id="optManifest" checked />
-          <span>Framework Manifests (Next/Nuxt/Webpack)</span>
+          <span>Framework Manifests (Next/Nuxt)</span>
         </label>
 
         <label class="opt-label">
           <input type="checkbox" id="optStatic" checked />
-          <span>Static JS & Source Maps</span>
+          <span>Static JS & Tree-sitter AST</span>
+        </label>
+
+        <label class="opt-label">
+          <input type="checkbox" id="optChunks" checked />
+          <span>Cracked Chunk Maps (Pass 2)</span>
+        </label>
+
+        <label class="opt-label">
+          <input type="checkbox" id="optDom" checked />
+          <span>Headless DOM Engine (Happy-DOM)</span>
         </label>
 
         <label class="opt-label">
           <input type="checkbox" id="optSpecs" checked />
-          <span>OpenAPI / Swagger Specs</span>
+          <span>OpenAPI / Swagger Specs Probing</span>
         </label>
 
         <label class="opt-label">
           <input type="checkbox" id="optGraphql" checked />
-          <span>GraphQL Services & Introspection</span>
+          <span>GraphQL Services & APQ Hashes</span>
         </label>
 
         <label class="opt-label">
@@ -769,7 +954,7 @@
       Findings (<span id="mobileCountEndpoints">0</span>)
     </button>
     <button type="button" id="btnMobileLogs" class="mobile-nav-btn" onclick="switchMobileView('logs')">
-      Logs Panel (<span id="mobileCountLogs">0</span>)
+      Live Logs (<span id="mobileCountLogs">0</span>)
     </button>
   </div>
 
@@ -779,11 +964,12 @@
     <div id="paneFindings" class="pane mobile-active">
       <div class="tabs">
         <button class="tab-btn active" onclick="switchTab('endpoints')">Endpoints (<span id="countEndpoints">0</span>)</button>
+        <button class="tab-btn" onclick="switchTab('chunks')">Chunks & Manifests (<span id="countChunks">0</span>)</button>
+        <button class="tab-btn" onclick="switchTab('graphql')">GraphQL & APQ (<span id="countGraphql">0</span>)</button>
         <button class="tab-btn" onclick="switchTab('specs')">Specs (<span id="countSpecs">0</span>)</button>
-        <button class="tab-btn" onclick="switchTab('graphql')">GraphQL (<span id="countGraphql">0</span>)</button>
-        <button class="tab-btn" onclick="switchTab('configs')">Configs</button>
-        <button class="tab-btn" onclick="switchTab('scripts')">Scripts (<span id="countScripts">0</span>)</button>
-        <button class="tab-btn" onclick="switchTab('json')">JSON</button>
+        <button class="tab-btn" onclick="switchTab('scripts')">Scripts & Maps (<span id="countScripts">0</span>)</button>
+        <button class="tab-btn" onclick="switchTab('configs')">Configs & Scope</button>
+        <button class="tab-btn" onclick="switchTab('json')">Raw JSON</button>
       </div>
 
       <div class="pane-content">
@@ -794,37 +980,65 @@
             <div class="stat-lbl">Endpoints</div>
           </div>
           <div class="stat-card">
+            <div id="statLive" class="stat-val">0</div>
+            <div class="stat-lbl">Live Probed</div>
+          </div>
+          <div class="stat-card">
+            <div id="statChunks" class="stat-val">0</div>
+            <div class="stat-lbl">Cracked Chunks</div>
+          </div>
+          <div class="stat-card">
+            <div id="statGraphql" class="stat-val">0</div>
+            <div class="stat-lbl">GraphQL & APQ</div>
+          </div>
+          <div class="stat-card">
             <div id="statSpecs" class="stat-val">0</div>
             <div class="stat-lbl">Specs</div>
           </div>
           <div class="stat-card">
-            <div id="statGraphql" class="stat-val">0</div>
-            <div class="stat-lbl">GraphQL</div>
-          </div>
-          <div class="stat-card">
             <div id="statScripts" class="stat-val">0</div>
             <div class="stat-lbl">Scripts</div>
-          </div>
-          <div class="stat-card">
-            <div id="statLive" class="stat-val">0</div>
-            <div class="stat-lbl">Live Probed</div>
           </div>
         </div>
 
         <!-- Tab: Endpoints -->
         <div id="tabContentEndpoints">
           <div class="filter-bar">
-            <input type="text" id="endpointFilter" class="filter-input" placeholder="Filter path, method, status..." oninput="renderEndpoints()" />
+            <input type="text" id="endpointFilter" class="filter-input" placeholder="Search route, method, tag (AST, HAR, Action)..." oninput="renderEndpoints()" />
             <select id="endpointStatusFilter" onchange="renderEndpoints()" style="min-height:36px; padding:4px 8px;">
-              <option value="all">All</option>
-              <option value="live">Live</option>
-              <option value="2xx">2xx</option>
-              <option value="4xx">4xx</option>
-              <option value="5xx">5xx</option>
+              <option value="all">All Status</option>
+              <option value="live">Live (Non-404)</option>
+              <option value="2xx">2xx Success</option>
+              <option value="4xx">4xx Client Err</option>
+              <option value="5xx">5xx Server Err</option>
+            </select>
+            <select id="endpointSourceFilter" onchange="renderEndpoints()" style="min-height:36px; padding:4px 8px;">
+              <option value="all">All Sources</option>
+              <option value="tree_sitter_ast">Tree-sitter AST</option>
+              <option value="server_action">Next-Action</option>
+              <option value="happy_dom">HappyDOM</option>
+              <option value="har_import">HAR Import</option>
+              <option value="cracked_chunk">Cracked Chunk</option>
+              <option value="spider">Crawler</option>
+              <option value="sourcemap">SourceMap</option>
             </select>
           </div>
           <div id="endpointsTableContainer">
-            <div class="empty-state">No endpoints discovered yet. Enter target URL and click Start Scan.</div>
+            <div class="empty-state">No endpoints discovered yet. Enter target URL and click Start Scan or Import HAR.</div>
+          </div>
+        </div>
+
+        <!-- Tab: Chunks & Manifests -->
+        <div id="tabContentChunks" style="display:none;">
+          <div id="chunksContainer">
+            <div class="empty-state">No cracked Webpack 4/5, Vite, or Next.js chunk manifests detected yet.</div>
+          </div>
+        </div>
+
+        <!-- Tab: GraphQL & APQ -->
+        <div id="tabContentGraphql" style="display:none;">
+          <div id="graphqlContainer">
+            <div class="empty-state">No GraphQL services, persisted queries (APQ), or operations identified.</div>
           </div>
         </div>
 
@@ -835,35 +1049,32 @@
           </div>
         </div>
 
-        <!-- Tab: GraphQL -->
-        <div id="tabContentGraphql" style="display:none;">
-          <div id="graphqlContainer">
-            <div class="empty-state">No GraphQL services or operations identified.</div>
+        <!-- Tab: Scripts & Maps -->
+        <div id="tabContentScripts" style="display:none;">
+          <div id="scriptsContainer">
+            <div class="empty-state">No JavaScript bundles or source maps discovered.</div>
           </div>
         </div>
 
-        <!-- Tab: Configs -->
+        <!-- Tab: Configs & Scope -->
         <div id="tabContentConfigs" style="display:none;">
           <div id="configsContainer">
             <div class="empty-state">No client configs or environment variables extracted.</div>
           </div>
         </div>
 
-        <!-- Tab: Scripts -->
-        <div id="tabContentScripts" style="display:none;">
-          <div id="scriptsContainer">
-            <div class="empty-state">No scripts discovered.</div>
-          </div>
-        </div>
-
-        <!-- Tab: JSON -->
+        <!-- Tab: Raw JSON -->
         <div id="tabContentJson" style="display:none;">
+          <div style="display:flex; justify-content:flex-end; gap:6px; margin-bottom:8px;">
+            <button type="button" style="min-height:30px; font-size:11px;" onclick="copyRawJson()">Copy JSON</button>
+            <button type="button" style="min-height:30px; font-size:11px;" onclick="exportResultsJson()">Download JSON</button>
+          </div>
           <pre id="rawJsonBox">{}</pre>
         </div>
       </div>
     </div>
 
-    <!-- Right Pane: Logs & Feedback -->
+    <!-- Right Pane: Live Logs & Feedback -->
     <div id="paneLogs" class="pane">
       <div class="pane-header">
         <div>
@@ -894,7 +1105,7 @@
         <div class="log-row">
           <span class="log-time">[--:--:--]</span>
           <span class="log-level INFO">INFO</span>
-          <span class="log-msg">Ready. Logs, events, and error stack traces will appear here in real time.</span>
+          <span class="log-msg">Ready. Logs, events, challenge solving, and stack traces will stream here in real time.</span>
         </div>
       </div>
 
@@ -918,6 +1129,31 @@
     </div>
   </div>
 
+  <!-- HAR Import Modal -->
+  <div id="harModal" class="modal-overlay" onclick="closeHarModal(event)">
+    <div class="modal-card" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <span style="font-weight:800; font-size:13px;">HAR 1.2 Ingestion & Reverse Engineering</span>
+        <button type="button" onclick="closeHarModal()" style="min-height:32px; padding:4px 10px;">CLOSE</button>
+      </div>
+      <div class="modal-body">
+        <div class="dropzone" id="harDropzone" onclick="document.getElementById('harFileInput').click()">
+          <input type="file" id="harFileInput" accept=".har,.json" style="display:none;" onchange="handleHarFileSelect(event)" />
+          <div class="dropzone-title">DRAG & DROP .HAR FILE HERE</div>
+          <div class="dropzone-sub">Or tap to browse from device (supports Chrome DevTools, Charles, Burp Suite HAR 1.2)</div>
+        </div>
+
+        <div style="margin-bottom: 8px; font-weight:700; font-size:11px;">OR PASTE HAR JSON:</div>
+        <textarea id="harPasteText" placeholder="Paste { 'log': { 'entries': [...] } } JSON content here..." style="width:100%; height:140px; font-size:12px; margin-bottom:12px; resize:vertical;"></textarea>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+          <span id="harStatusText" style="font-size:11px; color:var(--text-muted);">Ready to import.</span>
+          <button type="button" id="btnSubmitHar" class="primary" style="flex:0 0 auto;" onclick="submitHarImport()">Import & Reverse Engineer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     // State
     let currentTab = 'endpoints';
@@ -929,6 +1165,7 @@
     let pollInterval = null;
     let timerInterval = null;
     let startTime = null;
+    let sseSource = null;
 
     // Mobile View Toggle
     function switchMobileView(view) {
@@ -964,61 +1201,107 @@
       }
     }
 
+    // Dropdown Toggles
+    function toggleDropdown(id) {
+      const dd = document.getElementById(id);
+      dd.classList.toggle('show');
+    }
+
+    function closeDropdowns() {
+      document.querySelectorAll('.dropdown').forEach(d => d.classList.remove('show'));
+    }
+
+    window.addEventListener('click', function(e) {
+      if (!e.target.closest('.dropdown')) {
+        closeDropdowns();
+      }
+    });
+
     // Presets
     function applyPreset(name) {
+      const crawl = document.getElementById('optCrawl');
+      const manifest = document.getElementById('optManifest');
+      const stat = document.getElementById('optStatic');
+      const chunks = document.getElementById('optChunks');
+      const dom = document.getElementById('optDom');
+      const specs = document.getElementById('optSpecs');
+      const gql = document.getElementById('optGraphql');
+      const http = document.getElementById('optHttp');
+      const passive = document.getElementById('optPassive');
+      const priv = document.getElementById('optPrivateIps');
+
       if (name === 'full') {
-        document.getElementById('optCrawl').checked = true;
-        document.getElementById('optManifest').checked = true;
-        document.getElementById('optStatic').checked = true;
-        document.getElementById('optSpecs').checked = true;
-        document.getElementById('optGraphql').checked = true;
-        document.getElementById('optHttp').checked = true;
-        document.getElementById('optPassive').checked = false;
-        document.getElementById('optPrivateIps').checked = false;
-      } else if (name === 'probe') {
-        document.getElementById('optCrawl').checked = false;
-        document.getElementById('optManifest').checked = false;
-        document.getElementById('optStatic').checked = false;
-        document.getElementById('optSpecs').checked = true;
-        document.getElementById('optGraphql').checked = true;
-        document.getElementById('optHttp').checked = true;
-        document.getElementById('optPassive').checked = false;
+        crawl.checked = true;
+        manifest.checked = true;
+        stat.checked = true;
+        chunks.checked = true;
+        dom.checked = true;
+        specs.checked = true;
+        gql.checked = true;
+        http.checked = true;
+        passive.checked = false;
+        priv.checked = false;
+      } else if (name === 'stealth') {
+        crawl.checked = true;
+        manifest.checked = true;
+        stat.checked = true;
+        chunks.checked = true;
+        dom.checked = false; // avoid heavy headless triggers on strict bot gates
+        specs.checked = false;
+        gql.checked = false;
+        http.checked = false;
+        passive.checked = false;
+        priv.checked = false;
       } else if (name === 'static') {
-        document.getElementById('optCrawl').checked = true;
-        document.getElementById('optManifest').checked = true;
-        document.getElementById('optStatic').checked = true;
-        document.getElementById('optSpecs').checked = false;
-        document.getElementById('optGraphql').checked = false;
-        document.getElementById('optHttp').checked = false;
+        crawl.checked = true;
+        manifest.checked = true;
+        stat.checked = true;
+        chunks.checked = true;
+        dom.checked = false;
+        specs.checked = false;
+        gql.checked = false;
+        http.checked = false;
+      } else if (name === 'probe') {
+        crawl.checked = false;
+        manifest.checked = false;
+        stat.checked = false;
+        chunks.checked = false;
+        dom.checked = false;
+        specs.checked = true;
+        gql.checked = true;
+        http.checked = true;
       } else if (name === 'local') {
-        document.getElementById('optCrawl').checked = true;
-        document.getElementById('optManifest').checked = true;
-        document.getElementById('optStatic').checked = true;
-        document.getElementById('optSpecs').checked = true;
-        document.getElementById('optGraphql').checked = true;
-        document.getElementById('optHttp').checked = true;
-        document.getElementById('optPrivateIps').checked = true;
+        crawl.checked = true;
+        manifest.checked = true;
+        stat.checked = true;
+        chunks.checked = true;
+        dom.checked = true;
+        specs.checked = true;
+        gql.checked = true;
+        http.checked = true;
+        priv.checked = true;
       }
     }
 
-    // Tabs
+    // Tab Navigation
     function switchTab(tabId) {
       currentTab = tabId;
       document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
       const buttons = document.querySelectorAll('.tab-btn');
-      const tabs = ['endpoints', 'specs', 'graphql', 'configs', 'scripts', 'json'];
+      const tabs = ['endpoints', 'chunks', 'graphql', 'specs', 'scripts', 'configs', 'json'];
       const idx = tabs.indexOf(tabId);
       if (idx !== -1 && buttons[idx]) buttons[idx].classList.add('active');
 
       document.getElementById('tabContentEndpoints').style.display = tabId === 'endpoints' ? 'block' : 'none';
-      document.getElementById('tabContentSpecs').style.display = tabId === 'specs' ? 'block' : 'none';
+      document.getElementById('tabContentChunks').style.display = tabId === 'chunks' ? 'block' : 'none';
       document.getElementById('tabContentGraphql').style.display = tabId === 'graphql' ? 'block' : 'none';
-      document.getElementById('tabContentConfigs').style.display = tabId === 'configs' ? 'block' : 'none';
+      document.getElementById('tabContentSpecs').style.display = tabId === 'specs' ? 'block' : 'none';
       document.getElementById('tabContentScripts').style.display = tabId === 'scripts' ? 'block' : 'none';
+      document.getElementById('tabContentConfigs').style.display = tabId === 'configs' ? 'block' : 'none';
       document.getElementById('tabContentJson').style.display = tabId === 'json' ? 'block' : 'none';
     }
 
-    // Actions
+    // Start Scan Action
     async function startScan() {
       const urlInput = document.getElementById('targetUrl').value.trim();
       if (!urlInput) {
@@ -1047,6 +1330,7 @@
       document.getElementById('btnStop').disabled = false;
       document.getElementById('statusBadge').innerText = 'RUNNING';
       document.getElementById('statusBadge').className = 'status-badge running';
+      document.getElementById('stageBadge').innerText = 'STAGE: INIT';
 
       clearLogs();
       logOffset = 0;
@@ -1054,7 +1338,6 @@
       clearInterval(timerInterval);
       timerInterval = setInterval(updateTimer, 1000);
 
-      // On mobile, auto-switch to logs so the user sees progress immediately
       if (window.innerWidth < 900) {
         switchMobileView('logs');
       }
@@ -1098,13 +1381,16 @@
       logOffset = 0;
       resetScanState();
       clearLogs();
-      updateCountBadges({ endpoints: 0, specs: 0, graphql: 0, scripts: 0, live: 0 });
+      updateCountBadges({ endpoints: 0, specs: 0, graphql: 0, scripts: 0, chunk_manifests: 0, live: 0 });
       renderEndpoints();
+      document.getElementById('chunksContainer').innerHTML = '<div class="empty-state">No cracked Webpack 4/5, Vite, or Next.js chunk manifests detected yet.</div>';
       document.getElementById('specsContainer').innerHTML = '<div class="empty-state">No OpenAPI / Swagger specifications found.</div>';
-      document.getElementById('graphqlContainer').innerHTML = '<div class="empty-state">No GraphQL services or operations identified.</div>';
+      document.getElementById('graphqlContainer').innerHTML = '<div class="empty-state">No GraphQL services, persisted queries (APQ), or operations identified.</div>';
       document.getElementById('configsContainer').innerHTML = '<div class="empty-state">No client configs or environment variables extracted.</div>';
-      document.getElementById('scriptsContainer').innerHTML = '<div class="empty-state">No scripts discovered.</div>';
+      document.getElementById('scriptsContainer').innerHTML = '<div class="empty-state">No JavaScript bundles or source maps discovered.</div>';
       document.getElementById('rawJsonBox').innerText = '{}';
+      document.getElementById('stageBadge').innerText = 'STAGE: IDLE';
+      document.getElementById('wafBadge').style.display = 'none';
     }
 
     function resetScanState() {
@@ -1124,7 +1410,7 @@
       document.getElementById('elapsedTimer').innerText = `${m}:${s}`;
     }
 
-    // Polling Updates
+    // Polling and SSE Realtime Log Updates
     function startPolling() {
       clearInterval(pollInterval);
       fetchUpdates();
@@ -1147,7 +1433,15 @@
           const st = await statusResp.json();
           scanStatus = st.status;
           document.getElementById('statusBadge').innerText = st.status.toUpperCase();
+          document.getElementById('stageBadge').innerText = `STAGE: ${(st.stage || 'idle').toUpperCase()}`;
           document.getElementById('logSummaryText').innerText = `Stage: ${st.stage || 'idle'}`;
+
+          // Check if WAF or challenge was detected in logs or summary
+          if (st.summary && st.summary.waf_detected) {
+            const wb = document.getElementById('wafBadge');
+            wb.innerText = `WAF: ${st.summary.waf_detected}`;
+            wb.style.display = 'inline-flex';
+          }
 
           if (st.counts) {
             updateCountBadges(st.counts);
@@ -1174,19 +1468,22 @@
     function updateCountBadges(counts) {
       const ep = counts.endpoints || 0;
       const sp = counts.specs || 0;
-      const gq = counts.graphql || 0;
+      const gq = (counts.graphql || 0) + (counts.graphql_operations || 0);
       const sc = counts.scripts || 0;
+      const ch = counts.chunk_manifests || 0;
 
       document.getElementById('countEndpoints').innerText = ep;
       document.getElementById('mobileCountEndpoints').innerText = ep;
       document.getElementById('countSpecs').innerText = sp;
       document.getElementById('countGraphql').innerText = gq;
       document.getElementById('countScripts').innerText = sc;
+      document.getElementById('countChunks').innerText = ch;
 
       document.getElementById('statTotalEndpoints').innerText = ep;
       document.getElementById('statSpecs').innerText = sp;
       document.getElementById('statGraphql').innerText = gq;
       document.getElementById('statScripts').innerText = sc;
+      document.getElementById('statChunks').innerText = ch;
     }
 
     async function fetchResults() {
@@ -1201,11 +1498,19 @@
       }
     }
 
-    // Logs Rendering & Clipboard Copy
+    // Logs Rendering & Filtering
     function appendLogRow(entry) {
       logsList.push(entry);
       document.getElementById('logCounter').innerText = `(${logsList.length} lines)`;
       document.getElementById('mobileCountLogs').innerText = logsList.length;
+
+      // Detect WAF challenge from logs if not set
+      if (entry.message && (entry.message.includes('challenge') || entry.message.includes('Turnstile') || entry.message.includes('PoW solved'))) {
+        const wb = document.getElementById('wafBadge');
+        if (entry.message.includes('Turnstile')) wb.innerText = 'WAF: CLOUDFLARE TURNSTILE';
+        else if (entry.message.includes('PoW solved')) wb.innerText = 'CHALLENGE: REDDIT POW SOLVED';
+        wb.style.display = 'inline-flex';
+      }
 
       const container = document.getElementById('logsContainer');
       const search = document.getElementById('logSearch').value.toLowerCase();
@@ -1218,6 +1523,7 @@
       row.innerHTML = `
         <span class="log-time">[${escapeHtml(entry.time)}]</span>
         <span class="log-level ${escapeHtml(entry.level)}">${escapeHtml(entry.level)}</span>
+        ${entry.stage ? `<span class="log-stage">[${escapeHtml(entry.stage)}]</span>` : ''}
         <span class="log-msg">${escapeHtml(entry.message)}</span>
       `;
       container.appendChild(row);
@@ -1247,6 +1553,7 @@
           row.innerHTML = `
             <span class="log-time">[${escapeHtml(entry.time)}]</span>
             <span class="log-level ${escapeHtml(entry.level)}">${escapeHtml(entry.level)}</span>
+            ${entry.stage ? `<span class="log-stage">[${escapeHtml(entry.stage)}]</span>` : ''}
             <span class="log-msg">${escapeHtml(entry.message)}</span>
           `;
           container.appendChild(row);
@@ -1272,7 +1579,7 @@
       }
 
       const formattedText = logsList.map(l =>
-        `[${l.time}] [${l.level.padEnd(7, ' ')}] [${l.logger || 'api_tool'}] ${l.message}`
+        `[${l.time}] [${l.level.padEnd(7, ' ')}] [${l.stage || 'runner'}] [${l.logger || 'api_tool'}] ${l.message}`
       ).join('\n');
 
       const btn = document.getElementById('btnCopyLogs');
@@ -1313,12 +1620,14 @@
       if (!scanResults) return;
       document.getElementById('rawJsonBox').innerText = JSON.stringify(scanResults, null, 2);
       renderEndpoints();
-      renderSpecs();
+      renderChunks();
       renderGraphQL();
-      renderConfigs();
+      renderSpecs();
       renderScripts();
+      renderConfigs();
     }
 
+    // Endpoints Rendering
     function renderEndpoints() {
       const container = document.getElementById('endpointsTableContainer');
       const endpoints = (scanResults && scanResults.endpoints) || [];
@@ -1329,6 +1638,7 @@
 
       const query = document.getElementById('endpointFilter').value.toLowerCase();
       const statusFilter = document.getElementById('endpointStatusFilter').value;
+      const sourceFilter = document.getElementById('endpointSourceFilter').value;
 
       const filtered = endpoints.filter(ep => {
         if (query) {
@@ -1336,18 +1646,24 @@
           const matchMethod = (ep.method || '').toLowerCase().includes(query);
           const matchSource = (ep.source || '').toLowerCase().includes(query);
           const matchStatus = String(ep.active_status || '').includes(query);
-          if (!matchPath && !matchMethod && !matchSource && !matchStatus) return false;
+          const matchSummary = (ep.summary || '').toLowerCase().includes(query);
+          if (!matchPath && !matchMethod && !matchSource && !matchStatus && !matchSummary) return false;
         }
 
         if (statusFilter === 'live') {
-          return ep.active_status && ep.active_status !== 404 && ep.active_status !== 0;
+          if (!ep.active_status || ep.active_status === 404 || ep.active_status === 0) return false;
         } else if (statusFilter === '2xx') {
-          return ep.active_status >= 200 && ep.active_status < 300;
+          if (!(ep.active_status >= 200 && ep.active_status < 300)) return false;
         } else if (statusFilter === '4xx') {
-          return ep.active_status >= 400 && ep.active_status < 500;
+          if (!(ep.active_status >= 400 && ep.active_status < 500)) return false;
         } else if (statusFilter === '5xx') {
-          return ep.active_status >= 500 && ep.active_status < 600;
+          if (!(ep.active_status >= 500 && ep.active_status < 600)) return false;
         }
+
+        if (sourceFilter !== 'all') {
+          if (ep.source !== sourceFilter) return false;
+        }
+
         return true;
       });
 
@@ -1363,8 +1679,8 @@
               <tr>
                 <th style="width: 65px;">Method</th>
                 <th>Path / Route</th>
+                <th style="width: 140px;">Tags & Source</th>
                 <th style="width: 65px;">Status</th>
-                <th style="width: 75px;">Source</th>
                 <th style="width: 55px;">Action</th>
               </tr>
             </thead>
@@ -1378,12 +1694,32 @@
           else if (ep.active_status >= 500) statusClass = 'status-5xx';
         }
 
+        // Highlight parameterized portions in path like {id}
+        const highlightedPath = escapeHtml(ep.path || '/').replace(/\{([^}]+)\}/g, '<span class="path-param-highlight">{$1}</span>');
+
+        // Subsystem tags
+        let tagsHtml = '';
+        if (ep.source === 'tree_sitter_ast') tagsHtml += `<span class="badge-tag ast">AST</span>`;
+        else if (ep.source === 'server_action') tagsHtml += `<span class="badge-tag action">NEXT-ACT</span>`;
+        else if (ep.source === 'happy_dom') tagsHtml += `<span class="badge-tag dom">DOM</span>`;
+        else if (ep.source === 'har_import') tagsHtml += `<span class="badge-tag har">HAR</span>`;
+        else if (ep.source === 'cracked_chunk') tagsHtml += `<span class="badge-tag chunk">CHUNK</span>`;
+        else if (ep.source) tagsHtml += `<span class="badge-tag">${escapeHtml(ep.source)}</span>`;
+
+        if (ep.auth_type) {
+          tagsHtml += `<span class="badge-tag" style="border-style:dotted;">${escapeHtml(ep.auth_type)}</span>`;
+        }
+
+        if (ep.parameters && ep.parameters.length > 0) {
+          tagsHtml += `<span class="badge-tag">P:${ep.parameters.length}</span>`;
+        }
+
         html += `
           <tr>
             <td><span class="method-badge">${escapeHtml(ep.method || 'GET')}</span></td>
-            <td><strong>${escapeHtml(ep.path || '/')}</strong></td>
+            <td><strong>${highlightedPath}</strong></td>
+            <td>${tagsHtml}</td>
             <td>${ep.active_status ? `<span class="status-code ${statusClass}">${ep.active_status}</span>` : '<span style="color:var(--text-dim);">-</span>'}</td>
-            <td><span style="color:var(--text-muted); font-size:11px;">${escapeHtml(ep.source || 'static')}</span></td>
             <td><button type="button" style="padding: 4px 8px; font-size: 11px; min-height:30px;" onclick="viewEndpointDetails(${idx})">VIEW</button></td>
           </tr>
         `;
@@ -1403,9 +1739,18 @@
           <strong>Full URL:</strong> <a href="${escapeHtml(ep.full_url || ep.path)}" target="_blank" style="color: #000; text-decoration: underline;">${escapeHtml(ep.full_url || ep.path)}</a>
         </div>
         <div style="margin-bottom: 12px;">
-          <strong>Source:</strong> ${escapeHtml(ep.source || 'static')} | <strong>Active Status:</strong> ${ep.active_status || 'Not probed'}
+          <strong>Source Subsystem:</strong> ${escapeHtml(ep.source || 'static')} | <strong>Active Status:</strong> ${ep.active_status || 'Not probed'}
+          ${ep.response_time_ms ? ` | <strong>Latency:</strong> ${ep.response_time_ms}ms` : ''}
         </div>
       `;
+
+      if (ep.auth_type || ep.auth_header_or_param) {
+        body += `
+          <div style="margin-bottom: 12px; padding: 8px; border: 1px solid var(--border); background: var(--surface);">
+            <strong>Authentication:</strong> Type: <code>${escapeHtml(ep.auth_type || 'None')}</code> | Header/Param: <code>${escapeHtml(ep.auth_header_or_param || '-')}</code>
+          </div>
+        `;
+      }
 
       if (ep.summary) {
         body += `<div style="margin-bottom: 12px;"><strong>Summary:</strong> ${escapeHtml(ep.summary)}</div>`;
@@ -1415,7 +1760,7 @@
       }
 
       if (ep.parameters && ep.parameters.length > 0) {
-        body += `<h4>Parameters (${ep.parameters.length})</h4><div class="table-responsive" style="margin: 8px 0 16px 0;"><table><thead><tr><th>Name</th><th>Location</th><th>Type</th><th>Required</th><th>Example/Desc</th></tr></thead><tbody>`;
+        body += `<h4>Parameters (${ep.parameters.length})</h4><div class="table-responsive" style="margin: 8px 0 16px 0;"><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Required</th><th>Example/Desc</th></tr></thead><tbody>`;
         ep.parameters.forEach(p => {
           body += `<tr><td><strong>${escapeHtml(p.name)}</strong></td><td>${escapeHtml(p.location || 'query')}</td><td>${escapeHtml(p.param_type || 'string')}</td><td>${p.required ? 'Yes' : 'No'}</td><td>${escapeHtml(p.example || p.description || '-')}</td></tr>`;
         });
@@ -1423,17 +1768,161 @@
       }
 
       if (ep.headers && Object.keys(ep.headers).length > 0) {
-        body += `<h4>Headers</h4><pre>${escapeHtml(JSON.stringify(ep.headers, null, 2))}</pre>`;
+        body += `<h4>Discovered Headers</h4><pre>${escapeHtml(JSON.stringify(ep.headers, null, 2))}</pre>`;
       }
 
       if (ep.request_body_schema || ep.request_body_sample) {
-        body += `<h4>Request Body</h4><pre>${escapeHtml(JSON.stringify(ep.request_body_schema || ep.request_body_sample, null, 2))}</pre>`;
+        body += `<h4>Request Body Schema (OpenAPI 3.1)</h4><pre>${escapeHtml(JSON.stringify(ep.request_body_schema || ep.request_body_sample, null, 2))}</pre>`;
+      }
+
+      if (ep.responses && ep.responses.length > 0) {
+        body += `<h4>Discovered Responses (${ep.responses.length})</h4>`;
+        ep.responses.forEach(r => {
+          body += `
+            <div style="margin: 6px 0; border: 1px solid var(--border-subtle); padding: 8px; background: var(--surface);">
+              <div>Status: <strong>${r.status_code || 200}</strong> | Content-Type: <code>${escapeHtml(r.content_type || 'application/json')}</code></div>
+              ${r.schema ? `<pre style="margin-top:6px;">${escapeHtml(JSON.stringify(r.schema, null, 2))}</pre>` : ''}
+            </div>
+          `;
+        });
       }
 
       document.getElementById('modalBody').innerHTML = body;
       document.getElementById('detailModal').style.display = 'flex';
     }
 
+    // Chunks & Manifests Rendering
+    function renderChunks() {
+      const container = document.getElementById('chunksContainer');
+      const manifests = (scanResults && scanResults.chunk_manifests_detailed) || (scanResults && scanResults.chunk_manifests) || [];
+
+      if (manifests.length === 0) {
+        container.innerHTML = '<div class="empty-state">No cracked Webpack 4/5, Vite, or Next.js chunk manifests detected yet.</div>';
+        return;
+      }
+
+      let totalChunks = 0;
+      manifests.forEach(m => { totalChunks += (m.chunk_urls || []).length; });
+
+      let html = `
+        <div style="margin-bottom:12px; padding:10px; border:1px solid var(--border); background:var(--surface);">
+          <div style="font-weight:800; font-size:13px; margin-bottom:4px;">REVERSE-ENGINEERED CHUNK ARCHITECTURE</div>
+          <div style="font-size:12px;">Total Cracked Manifests: <strong>${manifests.length}</strong> | Discovered Chunk Bundles: <strong>${totalChunks}</strong></div>
+        </div>
+      `;
+
+      manifests.forEach((m, idx) => {
+        const fw = (m.framework || 'Webpack').toUpperCase();
+        const urls = m.chunk_urls || [];
+        const chunkMap = m.chunk_map || {};
+        const mapKeys = Object.keys(chunkMap);
+
+        html += `
+          <div class="manifest-card">
+            <div class="manifest-header">
+              <div>
+                <span class="badge-tag chunk">${escapeHtml(fw)}</span>
+                <span class="manifest-title">Chunk Manifest #${idx + 1}</span>
+              </div>
+              <span style="font-size:11px; font-weight:700;">${urls.length} Chunks Discovered</span>
+            </div>
+
+            ${m.source_script ? `<div style="font-size:11px; margin-bottom:6px; word-break:break-all;"><strong>Source Bundle:</strong> <code>${escapeHtml(m.source_script)}</code></div>` : ''}
+            ${m.template ? `<div style="font-size:11px; margin-bottom:6px;"><strong>Filename Template:</strong> <code>${escapeHtml(m.template)}</code></div>` : ''}
+
+            ${mapKeys.length > 0 ? `
+              <details style="margin-top:8px; margin-bottom:8px;">
+                <summary style="font-weight:700; font-size:11px; cursor:pointer;">View Chunk ID &rarr; Hash Map (${mapKeys.length} items)</summary>
+                <div class="table-responsive" style="margin-top:6px; max-height:220px; overflow-y:auto;">
+                  <table>
+                    <thead><tr><th>Chunk ID</th><th>Hash / Filename</th></tr></thead>
+                    <tbody>
+                      ${mapKeys.map(k => `<tr><td><code>${escapeHtml(k)}</code></td><td><code>${escapeHtml(chunkMap[k])}</code></td></tr>`).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            ` : ''}
+
+            ${urls.length > 0 ? `
+              <details style="margin-top:8px;">
+                <summary style="font-weight:700; font-size:11px; cursor:pointer;">Discovered Pass 2 Chunk URLs (${urls.length})</summary>
+                <ul style="padding-left:18px; margin-top:6px; font-size:11px; word-break:break-all; max-height:200px; overflow-y:auto;">
+                  ${urls.map(u => `<li><a href="${escapeHtml(u)}" target="_blank" style="color:#000;">${escapeHtml(u)}</a></li>`).join('')}
+                </ul>
+              </details>
+            ` : ''}
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    // GraphQL & APQ Rendering
+    function renderGraphQL() {
+      const container = document.getElementById('graphqlContainer');
+      const gqlServices = (scanResults && scanResults.graphql_detailed) || [];
+      const gqlOps = (scanResults && scanResults.graphql_operations) || [];
+
+      if (gqlServices.length === 0 && gqlOps.length === 0) {
+        container.innerHTML = '<div class="empty-state">No GraphQL services, persisted queries (APQ), or operations identified.</div>';
+        return;
+      }
+
+      let html = '';
+      if (gqlServices.length > 0) {
+        html += `<h4 style="margin-bottom:8px;">Active GraphQL Services (${gqlServices.length})</h4><div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">`;
+        gqlServices.forEach(g => {
+          html += `
+            <div style="border:1px solid var(--border); padding:8px; background:var(--surface);">
+              <div><strong>Endpoint:</strong> ${escapeHtml(g.endpoint_url || '/graphql')}</div>
+              <div style="font-size:12px;">Active: <strong>${g.is_active ? 'Yes' : 'No'}</strong> | Introspection: <strong>${g.introspection_enabled ? 'Enabled' : 'Disabled'}</strong> ${g.detected_ui ? `| UI: <strong>${escapeHtml(g.detected_ui)}</strong>` : ''}</div>
+              ${g.schema_sdl ? `<div style="margin-top:6px;"><button type="button" style="padding:4px 8px; font-size:10px; min-height:28px;" onclick="viewGraphQLSdl('${encodeURIComponent(g.schema_sdl)}')">View Introspected SDL</button></div>` : ''}
+            </div>
+          `;
+        });
+        html += `</div>`;
+      }
+
+      if (gqlOps.length > 0) {
+        html += `
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <h4>Harvested Operations & Apollo APQ Hashes (${gqlOps.length})</h4>
+            <a href="/api/export/graphql" download="schema.graphql" style="font-size:11px; font-weight:700; text-decoration:underline; color:#000;">Download Synthesized SDL</a>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+        `;
+        gqlOps.forEach((op, idx) => {
+          html += `
+            <div style="border:1px solid var(--border); padding:8px; background:var(--surface);">
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:4px;">
+                <div>
+                  <span class="method-badge">${escapeHtml(op.operation_type || 'query')}</span>
+                  <strong>${escapeHtml(op.operation_name || 'Anonymous')}</strong>
+                  ${op.source ? `<span class="badge-tag" style="margin-left:6px;">${escapeHtml(op.source)}</span>` : ''}
+                </div>
+                ${op.sha256_hash ? `<button type="button" style="padding:2px 6px; font-size:10px; min-height:26px;" onclick="copyToClipboard('${escapeHtml(op.sha256_hash)}')">Copy APQ Hash</button>` : ''}
+              </div>
+              ${op.sha256_hash ? `<div style="font-size:11px; color:var(--text-muted); margin-top:4px; word-break:break-all;"><strong>APQ SHA256:</strong> <code>${escapeHtml(op.sha256_hash)}</code></div>` : ''}
+              ${op.query_string ? `<pre style="margin-top:4px; max-height:140px; font-size:11px;">${escapeHtml(op.query_string)}</pre>` : ''}
+            </div>
+          `;
+        });
+        html += `</div>`;
+      }
+
+      container.innerHTML = html;
+    }
+
+    function viewGraphQLSdl(encodedSdl) {
+      const sdl = decodeURIComponent(encodedSdl);
+      document.getElementById('modalTitle').innerText = 'Introspected GraphQL Schema (SDL)';
+      document.getElementById('modalBody').innerHTML = `<pre>${escapeHtml(sdl)}</pre>`;
+      document.getElementById('detailModal').style.display = 'flex';
+    }
+
+    // Specs Rendering
     function renderSpecs() {
       const container = document.getElementById('specsContainer');
       const specs = (scanResults && scanResults.specs_detailed) || [];
@@ -1476,74 +1965,7 @@
       document.getElementById('detailModal').style.display = 'flex';
     }
 
-    function renderGraphQL() {
-      const container = document.getElementById('graphqlContainer');
-      const gqlServices = (scanResults && scanResults.graphql_detailed) || [];
-      const gqlOps = (scanResults && scanResults.graphql_operations) || [];
-
-      if (gqlServices.length === 0 && gqlOps.length === 0) {
-        container.innerHTML = '<div class="empty-state">No GraphQL services or operations identified.</div>';
-        return;
-      }
-
-      let html = '';
-      if (gqlServices.length > 0) {
-        html += `<h4 style="margin-bottom:8px;">Active Services (${gqlServices.length})</h4><div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">`;
-        gqlServices.forEach(g => {
-          html += `
-            <div style="border:1px solid var(--border); padding:8px; background:var(--surface);">
-              <div><strong>Endpoint:</strong> ${escapeHtml(g.endpoint_url || '/graphql')}</div>
-              <div style="font-size:12px;">Active: <strong>${g.is_active ? 'Yes' : 'No'}</strong> | Introspection: <strong>${g.introspection_enabled ? 'Enabled' : 'Disabled'}</strong> ${g.detected_ui ? `| UI: <strong>${escapeHtml(g.detected_ui)}</strong>` : ''}</div>
-              ${g.schema_sdl ? `<div style="margin-top:6px;"><button type="button" style="padding:4px 8px; font-size:10px; min-height:28px;" onclick="viewGraphQLSdl('${encodeURIComponent(g.schema_sdl)}')">View Introspected SDL</button></div>` : ''}
-            </div>
-          `;
-        });
-        html += `</div>`;
-      }
-
-      if (gqlOps.length > 0) {
-        html += `<h4 style="margin-bottom:8px;">Extracted Queries & Mutations (${gqlOps.length})</h4><div style="display:flex; flex-direction:column; gap:8px;">`;
-        gqlOps.forEach(op => {
-          html += `
-            <div style="border:1px solid var(--border); padding:8px; background:var(--surface);">
-              <div><span class="method-badge">${escapeHtml(op.operation_type || 'query')}</span> <strong>${escapeHtml(op.operation_name || 'Anonymous')}</strong></div>
-              <pre style="margin-top:4px; max-height:120px; font-size:11px;">${escapeHtml(op.query_string || '')}</pre>
-            </div>
-          `;
-        });
-        html += `</div>`;
-      }
-
-      container.innerHTML = html;
-    }
-
-    function viewGraphQLSdl(encodedSdl) {
-      const sdl = decodeURIComponent(encodedSdl);
-      document.getElementById('modalTitle').innerText = 'Introspected GraphQL Schema (SDL)';
-      document.getElementById('modalBody').innerHTML = `<pre>${escapeHtml(sdl)}</pre>`;
-      document.getElementById('detailModal').style.display = 'flex';
-    }
-
-    function renderConfigs() {
-      const container = document.getElementById('configsContainer');
-      const configs = (scanResults && scanResults.metadata && scanResults.metadata.client_configs) || {};
-      const baseUrls = (scanResults && scanResults.base_urls) || [];
-
-      let html = '';
-      if (baseUrls.length > 0) {
-        html += `<div style="margin-bottom:12px;"><h4>Discovered API Base URLs</h4><ul style="padding-left:18px;">${baseUrls.map(u => `<li><code>${escapeHtml(u)}</code></li>`).join('')}</ul></div>`;
-      }
-
-      if (Object.keys(configs).length > 0) {
-        html += `<div><h4>Client Configs & Environment Identifiers</h4><pre>${escapeHtml(JSON.stringify(configs, null, 2))}</pre></div>`;
-      }
-
-      if (!html) {
-        html = '<div class="empty-state">No client configs or environment variables extracted.</div>';
-      }
-      container.innerHTML = html;
-    }
-
+    // Scripts & Maps Rendering
     function renderScripts() {
       const container = document.getElementById('scriptsContainer');
       const scripts = (scanResults && scanResults.scripts_detailed) || [];
@@ -1580,7 +2002,118 @@
       container.innerHTML = html;
     }
 
-    function exportJson() {
+    // Configs & Scope Rendering
+    function renderConfigs() {
+      const container = document.getElementById('configsContainer');
+      const configs = (scanResults && scanResults.metadata && scanResults.metadata.client_configs) || {};
+      const baseUrls = (scanResults && scanResults.base_urls) || [];
+
+      let html = '';
+      if (baseUrls.length > 0) {
+        html += `<div style="margin-bottom:12px;"><h4>Discovered API Base URLs & Gateways</h4><ul style="padding-left:18px;">${baseUrls.map(u => `<li><code>${escapeHtml(u)}</code></li>`).join('')}</ul></div>`;
+      }
+
+      if (Object.keys(configs).length > 0) {
+        html += `<div><h4>Client Configurations & Reverse Engineering Metadata</h4><pre>${escapeHtml(JSON.stringify(configs, null, 2))}</pre></div>`;
+      }
+
+      if (!html) {
+        html = '<div class="empty-state">No client configs or environment variables extracted.</div>';
+      }
+      container.innerHTML = html;
+    }
+
+    // HAR Ingestion Modal Handlers
+    function openHarModal() {
+      document.getElementById('harModal').style.display = 'flex';
+      setupDragDrop();
+    }
+
+    function closeHarModal(event) {
+      if (event && event.target !== event.currentTarget) return;
+      document.getElementById('harModal').style.display = 'none';
+    }
+
+    function setupDragDrop() {
+      const dropzone = document.getElementById('harDropzone');
+      dropzone.ondragover = function(e) { e.preventDefault(); dropzone.classList.add('dragover'); };
+      dropzone.ondragleave = function() { dropzone.classList.remove('dragover'); };
+      dropzone.ondrop = function(e) {
+        e.preventDefault();
+        dropzone.classList.remove('dragover');
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          readHarFile(e.dataTransfer.files[0]);
+        }
+      };
+    }
+
+    function handleHarFileSelect(event) {
+      if (event.target.files && event.target.files.length > 0) {
+        readHarFile(event.target.files[0]);
+      }
+    }
+
+    function readHarFile(file) {
+      const reader = new FileReader();
+      document.getElementById('harStatusText').innerText = `Reading file: ${file.name}...`;
+      reader.onload = function(e) {
+        try {
+          const content = e.target.result;
+          document.getElementById('harPasteText').value = content;
+          document.getElementById('harStatusText').innerText = `Loaded ${file.name} (${Math.round(file.size / 1024)} KB). Click Import below.`;
+        } catch (err) {
+          alert('Failed to read file: ' + err);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    async function submitHarImport() {
+      const text = document.getElementById('harPasteText').value.trim();
+      if (!text) {
+        alert('Please choose a .har file or paste HAR JSON content.');
+        return;
+      }
+
+      let parsedHar;
+      try {
+        parsedHar = JSON.parse(text);
+      } catch (err) {
+        alert('Invalid JSON format: ' + err);
+        return;
+      }
+
+      const btn = document.getElementById('btnSubmitHar');
+      btn.disabled = true;
+      document.getElementById('harStatusText').innerText = 'Importing and synthesizing OpenAPI schemas...';
+
+      try {
+        const resp = await fetch('/api/import/har', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ har: parsedHar })
+        });
+        const res = await resp.json();
+        if (resp.status >= 400) {
+          alert('HAR import failed: ' + (res.error || 'Unknown error'));
+        } else {
+          document.getElementById('harStatusText').innerText = `Imported ${res.endpoints_count} endpoints!`;
+          setTimeout(() => {
+            closeHarModal();
+            fetchUpdates();
+            fetchResults();
+            switchTab('endpoints');
+          }, 600);
+        }
+      } catch (err) {
+        alert('Network error during import: ' + err);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // Export Helpers
+    function exportResultsJson() {
       if (!scanResults) {
         alert('No scan results to export yet.');
         return;
@@ -1588,13 +2121,34 @@
       const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(scanResults, null, 2));
       const downloadAnchor = document.createElement('a');
       downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `api-tool-scan-${Date.now()}.json`);
+      downloadAnchor.setAttribute("download", `miniature-engine-scan-${Date.now()}.json`);
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
       downloadAnchor.remove();
     }
 
-    function closeModal() {
+    function copyRawJson() {
+      if (!scanResults) {
+        alert('No scan results available yet.');
+        return;
+      }
+      copyToClipboard(JSON.stringify(scanResults, null, 2));
+    }
+
+    function copyToClipboard(text) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+          alert('Copied to clipboard!');
+        }).catch(() => {
+          fallbackCopyText(text, () => alert('Copied to clipboard!'));
+        });
+      } else {
+        fallbackCopyText(text, () => alert('Copied to clipboard!'));
+      }
+    }
+
+    function closeModal(event) {
+      if (event && event.target !== event.currentTarget) return;
       document.getElementById('detailModal').style.display = 'none';
     }
 

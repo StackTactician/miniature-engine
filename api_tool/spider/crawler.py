@@ -18,6 +18,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from api_tool.models import DiscoveredEndpoint, DiscoveredParameter
+from api_tool.spider.scope_resolver import CDNScopeResolver
 
 logger = logging.getLogger(__name__)
 
@@ -315,8 +316,10 @@ class AsyncSpider:
         ),
         custom_headers: Optional[Dict[str, str]] = None,
         client: Optional[httpx.AsyncClient] = None,
+        scope_resolver: Optional[CDNScopeResolver] = None,
     ) -> None:
         self.allowed_domains = allowed_domains or []
+        self.scope_resolver = scope_resolver
         self.max_depth = max_depth
         self.max_pages = max_pages
         self.concurrency = concurrency
@@ -380,12 +383,25 @@ class AsyncSpider:
             logger.debug("Failed to parse HTML for %s: %s", page_url, e)
             return links, scripts, assets
 
+        resolver = self.scope_resolver
+        if resolver is None:
+            targets = list(self.allowed_domains) if self.allowed_domains else [urlsplit(page_url).netloc.split(":")[0]]
+            resolver = CDNScopeResolver(target_domains=targets)
+
+        # Dynamically discover CSP from meta tags
+        for meta in soup.find_all("meta"):
+            http_equiv = meta.get("http-equiv", "").lower()
+            if http_equiv in ("content-security-policy", "content-security-policy-report-only"):
+                csp_content = meta.get("content")
+                if csp_content:
+                    resolver.update_from_csp(csp_content)
+
         # 1. <script src="...">
         for script in soup.find_all("script"):
             src = script.get("src")
             if src:
                 norm_src = self.normalizer.normalize(src, base_url=page_url)
-                if norm_src:
+                if norm_src and resolver.is_asset_in_scope(norm_src):
                     scripts.append(norm_src)
 
         # 2. <link rel="...">
@@ -403,11 +419,14 @@ class AsyncSpider:
             if any(r in rel_list for r in ("preload", "prefetch", "modulepreload")):
                 as_type = link.get("as", "").lower()
                 if as_type == "script" or norm_href.endswith(".js"):
-                    scripts.append(norm_href)
+                    if resolver.is_asset_in_scope(norm_href):
+                        scripts.append(norm_href)
                 else:
-                    assets.append(norm_href)
+                    if resolver.is_asset_in_scope(norm_href):
+                        assets.append(norm_href)
             elif "stylesheet" in rel_list:
-                assets.append(norm_href)
+                if resolver.is_asset_in_scope(norm_href):
+                    assets.append(norm_href)
 
         # 3. <a href="...">
         for a in soup.find_all("a"):
@@ -422,14 +441,15 @@ class AsyncSpider:
 
             norm_link = self.normalizer.normalize(href_clean, base_url=page_url)
             if norm_link and not self.normalizer.is_static_asset(norm_link):
-                links.append(norm_link)
+                if resolver.is_page_in_scope(norm_link):
+                    links.append(norm_link)
 
         # 4. Form actions (<form action="...">)
         for form in soup.find_all("form"):
             action = form.get("action")
             if action:
                 norm_action = self.normalizer.normalize(action, base_url=page_url)
-                if norm_action:
+                if norm_action and resolver.is_page_in_scope(norm_action):
                     links.append(norm_action)
 
         return links, scripts, assets
@@ -447,6 +467,12 @@ class AsyncSpider:
         base_domain = start_parsed.netloc.split(":")[0]
         if not self.allowed_domains:
             self.allowed_domains = [base_domain]
+
+        if self.scope_resolver is None:
+            self.scope_resolver = CDNScopeResolver(target_domains=self.allowed_domains)
+        else:
+            for d in self.allowed_domains:
+                self.scope_resolver.add_target_domain(d)
 
         headers = {
             "User-Agent": self.user_agent,
@@ -529,6 +555,14 @@ class AsyncSpider:
 
                             status_code = resp.status_code
                             content_type = resp.headers.get("content-type", "").lower()
+
+                            # Dynamically update scope resolver with CSP headers
+                            csp_header = resp.headers.get("content-security-policy")
+                            if csp_header and self.scope_resolver:
+                                self.scope_resolver.update_from_csp(csp_header)
+                            csp_report = resp.headers.get("content-security-policy-report-only")
+                            if csp_report and self.scope_resolver:
+                                self.scope_resolver.update_from_csp(csp_report)
                         except httpx.TooManyRedirects as loop_err:
                             logger.warning("Redirect loop detected for %s: %s", url, loop_err)
                             result.failed_urls[url] = f"Redirect loop detected: {loop_err}"
@@ -584,9 +618,13 @@ class AsyncSpider:
                                     continue
 
                                 # Scope check
-                                in_scope = any(
-                                    self.normalizer.is_same_domain(link, d)
-                                    for d in self.allowed_domains
+                                in_scope = (
+                                    self.scope_resolver.is_page_in_scope(link)
+                                    if self.scope_resolver
+                                    else any(
+                                        self.normalizer.is_same_domain(link, d)
+                                        for d in self.allowed_domains
+                                    )
                                 )
                                 if not in_scope:
                                     continue
@@ -622,3 +660,101 @@ class AsyncSpider:
         result.template_counts = dict(template_counts)
 
         return result
+
+    async def fetch_chunks(self, chunk_urls: List[str]) -> Dict[str, str]:
+        """
+        Concurrently downloads newly discovered chunk scripts using configured rate-limits and backoff.
+        Returns mapping of chunk_url -> script_content for successfully downloaded chunks.
+        """
+        if not chunk_urls:
+            return {}
+
+        # Deduplicate and filter out out-of-scope assets if scope_resolver is available
+        unique_urls: List[str] = []
+        seen: Set[str] = set()
+        for u in chunk_urls:
+            norm_u = self.normalizer.normalize(u)
+            if not norm_u or norm_u in seen:
+                continue
+            seen.add(norm_u)
+            if self.scope_resolver and not self.scope_resolver.is_asset_in_scope(norm_u):
+                logger.debug("Skipping out-of-scope chunk URL: %s", norm_u)
+                continue
+            unique_urls.append(norm_u)
+
+        if not unique_urls:
+            return {}
+
+        results: Dict[str, str] = {}
+        headers = {
+            "User-Agent": self.user_agent,
+            "Accept": "*/*",
+            **self.custom_headers,
+        }
+
+        client_provided = self._external_client is not None
+        client = self._external_client or httpx.AsyncClient(
+            headers=headers,
+            timeout=httpx.Timeout(self.request_timeout),
+            follow_redirects=True,
+            verify=False,
+            limits=httpx.Limits(max_keepalive_connections=10, max_connections=self.concurrency),
+        )
+
+        semaphore = asyncio.Semaphore(self.concurrency)
+
+        async def fetch_single(url: str) -> None:
+            async with semaphore:
+                retries_left = self.max_retries
+                attempt = 0
+                while True:
+                    try:
+                        resp = await client.get(url, follow_redirects=True)
+                        if resp.status_code == 429 and retries_left > 0:
+                            retries_left -= 1
+                            attempt += 1
+                            raw_retry_after = resp.headers.get("retry-after")
+                            backoff = self._parse_retry_after(
+                                raw_retry_after,
+                                default_delay=self.backoff_factor * (2 ** (attempt - 1)),
+                            )
+                            backoff = min(backoff, self.max_backoff_delay)
+                            logger.warning(
+                                "Rate-limited (HTTP 429) fetching chunk %s. Backing off for %.2fs (attempt %d/%d).",
+                                url,
+                                backoff,
+                                attempt,
+                                self.max_retries,
+                            )
+                            await asyncio.sleep(backoff)
+                            continue
+
+                        if resp.status_code == 200:
+                            results[url] = resp.text
+                        else:
+                            logger.debug("Failed to fetch chunk %s: status %d", url, resp.status_code)
+                        break
+                    except Exception as req_err:
+                        if retries_left > 0:
+                            retries_left -= 1
+                            attempt += 1
+                            backoff = min(self.backoff_factor * (2 ** (attempt - 1)), self.max_backoff_delay)
+                            logger.warning(
+                                "Request error fetching chunk %s: %s. Backing off for %.2fs.",
+                                url,
+                                req_err,
+                                backoff,
+                            )
+                            await asyncio.sleep(backoff)
+                            continue
+                        logger.debug("Giving up on chunk %s: %s", url, req_err)
+                        break
+
+        try:
+            tasks = [asyncio.create_task(fetch_single(u)) for u in unique_urls]
+            await asyncio.gather(*tasks)
+        finally:
+            if not client_provided:
+                await client.aclose()
+
+        return results

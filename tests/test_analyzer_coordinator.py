@@ -255,6 +255,35 @@ class TestStaticAnalyzerAnalyzeCode(unittest.TestCase):
         test_gql = [g for g in res.graphql_operations if g.operation_name == "TestQ"]
         self.assertEqual(len(test_gql), 1)
 
+    def test_ast_and_chunk_cracking_integration(self):
+        code = """
+        // Template string with AST extraction
+        const url = `/api/v1/projects/${projectId}/tasks/${taskId}?filter=active`;
+        fetch(url);
+
+        // Webpack 5 chunk function
+        __webpack_require__.u = function(chunkId) {
+            return "" + chunkId + "." + {
+                "10": "abc123",
+                "20": "def456"
+            }[chunkId] + ".chunk.js";
+        };
+        """
+        res = self.analyzer.analyze_code(code, base_url="https://app.example.com", script_url="https://app.example.com/runtime.js")
+
+        # 1. AST endpoint
+        ast_eps = [e for e in res.endpoints if "{projectId}" in e.path]
+        self.assertTrue(len(ast_eps) >= 1)
+        self.assertTrue(ast_eps[0].path.startswith("/api/v1/projects/{projectId}/tasks/{taskId}"))
+
+        # 2. Chunk manifests
+        self.assertEqual(len(res.chunk_manifests), 1)
+        manifest = res.chunk_manifests[0]
+        self.assertEqual(manifest.framework, "webpack5")
+        self.assertIn("10", manifest.chunk_map)
+        self.assertIn("https://app.example.com/10.abc123.chunk.js", manifest.chunk_urls)
+
+
 
 class TestStaticAnalyzerAsyncScript(unittest.TestCase):
     def setUp(self):

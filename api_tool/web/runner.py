@@ -15,13 +15,16 @@ import traceback
 from typing import Any, Dict, List, Optional, Set
 from urllib.parse import urlsplit
 
-import httpx
-
 from api_tool.models import (
     DiscoveredEndpoint,
+    DiscoveredChunkManifest,
     GraphQLOperation,
     ScanResult,
 )
+from api_tool.network.client import StealthAsyncClient, BrowserProfile
+from api_tool.network.challenge import WAFDetector, RedditPoWSolver
+from api_tool.runtime.dom_engine import HappyDOMEngine
+from api_tool.spider.scope_resolver import CDNScopeResolver
 from api_tool.spider.crawler import AsyncSpider, URLNormalizer
 from api_tool.spider.manifest import ManifestExtractor, ManifestResult
 from api_tool.spider.passive import PassiveHarvester, PassiveHarvestResult
@@ -77,6 +80,7 @@ class ScanRunner:
         self.graphql_operations: List[GraphQLOperation] = []
         self.client_configs: Dict[str, Any] = {}
         self.sourcemap_results: List[Dict[str, Any]] = []
+        self.chunk_manifests: List[Dict[str, Any]] = []
         self.summary: Dict[str, Any] = {}
         self.error_message: Optional[str] = None
 
@@ -115,6 +119,7 @@ class ScanRunner:
                 "graphql_operations": len(self.graphql_operations),
                 "scripts": len(self.scripts),
                 "assets": len(self.assets),
+                "chunk_manifests": len(self.chunk_manifests),
                 "logs": len(self.logs),
             },
             "summary": self.summary,
@@ -131,6 +136,10 @@ class ScanRunner:
 
     def get_results(self) -> Dict[str, Any]:
         """Serializes current scan findings to dictionary."""
+        chunk_manifest_objs = [
+            DiscoveredChunkManifest.from_dict(cm) if isinstance(cm, dict) else cm
+            for cm in self.chunk_manifests
+        ]
         scan_res = ScanResult(
             target_url=self.target_url,
             base_urls=[self.base_url] if self.base_url else [],
@@ -138,6 +147,7 @@ class ScanRunner:
             graphql_operations=self.graphql_operations,
             discovered_specs=[s.get("url", "") for s in self.specs if s.get("url")],
             discovered_assets=sorted(list(self.assets)),
+            chunk_manifests=chunk_manifest_objs,
             metadata={
                 "summary": self.summary,
                 "client_configs": self.client_configs,
@@ -150,6 +160,7 @@ class ScanRunner:
         data["graphql_detailed"] = self.graphql_results
         data["scripts_detailed"] = sorted(list(self.scripts))
         data["sourcemaps_detailed"] = self.sourcemap_results
+        data["chunk_manifests_detailed"] = self.chunk_manifests
         return data
 
     def stop_scan(self) -> bool:
@@ -182,8 +193,34 @@ class ScanRunner:
         self.graphql_operations.clear()
         self.client_configs.clear()
         self.sourcemap_results.clear()
+        self.chunk_manifests.clear()
         self.summary.clear()
         self.error_message = None
+
+    def load_from_scan_result(self, scan_result: ScanResult) -> None:
+        """Populates ScanRunner state from an imported ScanResult (e.g. from HARImporter)."""
+        self.clear()
+        self.target_url = scan_result.target_url
+        if scan_result.base_urls:
+            self.base_url = scan_result.base_urls[0]
+        self.status = "completed"
+        self.stage = "imported"
+        self.endpoints = list(scan_result.endpoints)
+        self.graphql_operations = list(scan_result.graphql_operations)
+        for s in scan_result.discovered_specs:
+            self.specs.append({"url": s, "type": "openapi"})
+        for op in scan_result.graphql_operations:
+            self.graphql_results.append(op.to_dict())
+        for a in scan_result.discovered_assets:
+            self.assets.add(a)
+        if scan_result.chunk_manifests:
+            self.chunk_manifests = [cm.to_dict() for cm in scan_result.chunk_manifests]
+        self.summary = dict(scan_result.metadata.get("summary", scan_result.metadata))
+        self.add_log(
+            "INFO",
+            f"Loaded {len(self.endpoints)} endpoints and {len(self.graphql_operations)} GraphQL ops from import",
+            "importer",
+        )
 
     async def run(self, target_url: str, options: Optional[Dict[str, Any]] = None) -> None:
         """Main entry point to execute the complete API tool discovery workflow."""
@@ -267,17 +304,90 @@ class ScanRunner:
         collected_scripts: Set[str] = set()
         collected_assets: Set[str] = set()
 
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(12.0),
-            follow_redirects=True,
-            verify=False,
-            headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 "
-                    "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 api-tool/0.1.0"
-                )
-            },
-        ) as client:
+        # Instantiate CDNScopeResolver
+        scope_resolver = CDNScopeResolver(target_domains=[target_domain])
+
+        # Configure StealthAsyncClient with Chrome 120 profile and mock transport detection
+        mock_transport = opts.get("transport") or opts.get("mock_transport")
+        mock_client = opts.get("client") or opts.get("mock_client")
+
+        client_kwargs: Dict[str, Any] = {
+            "timeout": 15.0,
+            "follow_redirects": True,
+            "verify": False,
+        }
+        if mock_client is not None:
+            client_kwargs["mock_client"] = mock_client
+        elif mock_transport is not None:
+            client_kwargs["mock_transport"] = mock_transport
+        else:
+            client_kwargs["impersonate"] = "chrome120"
+
+        async with StealthAsyncClient(**client_kwargs) as client:
+            # Step 0: Initial fetch for CSP, WAF detection, and SPA dynamic evaluation
+            initial_html = ""
+            waf_detector = WAFDetector()
+            try:
+                init_resp = await client.get(norm_url)
+                initial_html = init_resp.text
+                if "content-security-policy" in init_resp.headers:
+                    scope_resolver.update_from_csp(init_resp.headers["content-security-policy"])
+                if "content-security-policy-report-only" in init_resp.headers:
+                    scope_resolver.update_from_csp(init_resp.headers["content-security-policy-report-only"])
+
+                waf_res = waf_detector.detect(init_resp)
+                if waf_res.detected:
+                    self.add_log("WARNING", f"WAF / Challenge detected: {waf_res.waf_name} ({waf_res.challenge_type})", "security")
+                    if waf_res.waf_name == "reddit_pow":
+                        if waf_res.challenge_type == "js_challenge":
+                            js_chal = waf_res.details
+                            self.add_log("INFO", f"Solving Reddit inline JS challenge (seed={js_chal.get('seed')})...", "security")
+                            from urllib.parse import urljoin
+                            chal_url = urljoin(self.base_url, js_chal.get("action", "/"))
+                            chal_resp = await client.get(chal_url, params=js_chal.get("inputs", {}))
+                            if chal_resp.status_code == 200 and len(chal_resp.text) > len(initial_html):
+                                self.add_log("INFO", f"Reddit challenge solved successfully! (Received full HTML: {len(chal_resp.text)} bytes)", "security")
+                                initial_html = chal_resp.text
+                                if "content-security-policy" in chal_resp.headers:
+                                    scope_resolver.update_from_csp(chal_resp.headers["content-security-policy"])
+                        else:
+                            self.add_log("INFO", "Solving Reddit PoW challenge...", "security")
+                            pow_solver = RedditPoWSolver()
+                            chal = pow_solver.extract_challenge(init_resp)
+                            if chal and chal.get("nonce"):
+                                sol = pow_solver.solve(chal["nonce"], chal.get("difficulty", 4))
+                                self.add_log("INFO", f"Solved Reddit PoW challenge in {sol.elapsed_ms:.2f}ms", "security")
+
+                # If dynamic SPA markers or challenge detected, evaluate dynamic DOM with HappyDOMEngine
+                spa_markers = ("<div id=\"root\"", "<div id=\"app\"", "<div id=\"__next\"", "challenge", "turnstile", "shreddit")
+                if any(m in initial_html.lower() for m in spa_markers) or waf_res.detected:
+                    try:
+                        self.add_log("INFO", "Evaluating dynamic JavaScript SPA with HappyDOMEngine...", "runtime")
+                        dom_data = await HappyDOMEngine.evaluate(norm_url, initial_html, timeout=10.0)
+                        if dom_data.get("dynamic_endpoints"):
+                            self.add_log("INFO", f"Happy-DOM intercepted {len(dom_data['dynamic_endpoints'])} dynamic API calls", "runtime")
+                            for dep in dom_data["dynamic_endpoints"]:
+                                d_url = dep.get("url", "")
+                                p_url = urlsplit(d_url)
+                                dep_base = f"{p_url.scheme}://{p_url.netloc}" if p_url.netloc else self.base_url
+                                ep = DiscoveredEndpoint(
+                                    path=p_url.path or "/",
+                                    method=dep.get("method", "GET"),
+                                    base_url=dep_base,
+                                    source="happy_dom",
+                                    tags=["happy_dom", "dynamic_spa"],
+                                    summary=f"Dynamic API call: {d_url}",
+                                )
+                                collected_endpoints.append(ep)
+                        if dom_data.get("discovered_links"):
+                            for link in dom_data["discovered_links"]:
+                                if link.endswith(".js") and scope_resolver.is_asset_in_scope(link):
+                                    collected_scripts.add(link)
+                    except Exception as dom_exc:
+                        self.add_log("WARNING", f"HappyDOMEngine evaluation skipped: {dom_exc}", "runtime")
+            except Exception as init_exc:
+                self.add_log("WARNING", f"Initial probe encountered an error: {init_exc}", "runner")
+
             # -------------------------------------------------------------
             # Stage 1: Framework Manifest Discovery
             # -------------------------------------------------------------
@@ -286,7 +396,11 @@ class ScanRunner:
                 self.add_log("INFO", f"[1/5] Extracting framework manifests (Next.js, Nuxt, Webpack) from {norm_url}...", "manifest")
                 try:
                     extractor = ManifestExtractor(request_timeout=10.0)
-                    manifest_res = await extractor.fetch_and_extract(self.base_url, client=client)
+                    manifest_res = await extractor.fetch_and_extract(
+                        self.base_url,
+                        html=initial_html if initial_html else None,
+                        client=client,
+                    )
                     if manifest_res.framework:
                         self.add_log(
                             "INFO",
@@ -320,6 +434,7 @@ class ScanRunner:
                 try:
                     spider = AsyncSpider(
                         allowed_domains=[target_domain],
+                        scope_resolver=scope_resolver,
                         max_depth=opt_depth,
                         max_pages=opt_pages,
                         concurrency=opt_concurrency,
@@ -397,9 +512,10 @@ class ScanRunner:
                     )
                     self.add_log(
                         "INFO",
-                        f"Static analysis finished: {len(static_res.endpoints)} endpoints, "
+                        f"Static analysis Pass 1 finished: {len(static_res.endpoints)} endpoints, "
                         f"{len(static_res.graphql_operations)} GraphQL queries, "
-                        f"{len(static_res.source_map_results)} source maps processed.",
+                        f"{len(static_res.source_map_results)} source maps, "
+                        f"{len(static_res.chunk_manifests)} chunk manifests processed.",
                         "analyzer",
                     )
                     for ep in static_res.endpoints:
@@ -409,7 +525,51 @@ class ScanRunner:
 
                     self.client_configs = static_res.client_configs
                     self.sourcemap_results = [sm.to_dict() for sm in static_res.source_map_results]
+
+                    # Iterative Chunk Cracking Pass 2
+                    all_chunk_urls: Set[str] = set()
+                    for cm in static_res.chunk_manifests:
+                        self.chunk_manifests.append(cm.to_dict())
+                        for cu in cm.chunk_urls:
+                            if cu not in collected_scripts and scope_resolver.is_asset_in_scope(cu):
+                                all_chunk_urls.add(cu)
+
+                    if all_chunk_urls:
+                        new_chunks = sorted(list(all_chunk_urls))
+                        self.add_log(
+                            "INFO",
+                            f"Discovered {len(new_chunks)} cracked chunk scripts! Fetching and analyzing in Pass 2...",
+                            "analyzer",
+                        )
+                        for cu in new_chunks:
+                            collected_scripts.add(cu)
+
+                        pass2_res = await analyzer.analyze_scripts(
+                            new_chunks,
+                            base_url=self.base_url,
+                            concurrency=opt_concurrency,
+                            client=client,
+                        )
+                        self.add_log(
+                            "INFO",
+                            f"Static analysis Pass 2 finished: +{len(pass2_res.endpoints)} endpoints, "
+                            f"+{len(pass2_res.graphql_operations)} GraphQL queries.",
+                            "analyzer",
+                        )
+                        for ep in pass2_res.endpoints:
+                            collected_endpoints.append(ep)
+                        for gop in pass2_res.graphql_operations:
+                            self.graphql_operations.append(gop)
+                        for cm in pass2_res.chunk_manifests:
+                            self.chunk_manifests.append(cm.to_dict())
+                        for sm in pass2_res.source_map_results:
+                            self.sourcemap_results.append(sm.to_dict())
+                        self.client_configs = StaticAnalyzer._merge_client_configs(
+                            self.client_configs, pass2_res.client_configs
+                        )
+
                     self.endpoints = list(collected_endpoints)
+                    self.scripts = set(collected_scripts)
                 except Exception as exc:
                     self.add_log("ERROR", f"Static analysis failed: {exc}", "analyzer")
 

@@ -602,3 +602,164 @@ class GraphQLProber:
         finally:
             if not client_provided:
                 await c.aclose()
+
+    async def probe_apq_hash(
+        self,
+        endpoint_url: str,
+        sha256_hash: str,
+        operation_name: Optional[str] = None,
+        client: Optional[httpx.AsyncClient] = None,
+    ) -> GraphQLProbeResult:
+        """
+        Probes a GraphQL endpoint using an Apollo APQ sha256 hash or persisted query identifier
+        when standard schema introspection is blocked or disabled.
+
+        Tests:
+        1. POST with Apollo APQ extensions:
+           {"extensions": {"persistedQuery": {"version": 1, "sha256Hash": "<hash>"}}, ...}
+        2. GET fallback with extensions encoded in query parameters:
+           ?extensions={"persistedQuery":{"version":1,"sha256Hash":"<hash>"}}&operationName=...
+        3. Analyzes response:
+           - data returned -> persisted query recognized and executed!
+           - PersistedQueryNotFound error -> server explicitly supports the APQ protocol!
+           - structured GraphQL errors (e.g. variable validation) -> server recognized the query!
+        """
+        url = endpoint_url.strip()
+        result = GraphQLProbeResult(endpoint_url=url)
+
+        # SSRF guard: validate URL before making any HTTP request (unless using MockTransport in tests)
+        is_mock = client is not None and isinstance(getattr(client, "_transport", None), httpx.MockTransport)
+        if not is_mock:
+            from api_tool.prober.http_prober import is_safe_target
+            safe, reason = is_safe_target(url)
+            if not safe:
+                result.error = f"SSRF protection blocked target: {reason}"
+                logger.warning("SSRF blocked GraphQL APQ probe for %s: %s", url, reason)
+                return result
+
+        client_provided = client is not None
+        c = client or httpx.AsyncClient(
+            timeout=httpx.Timeout(self.timeout),
+            follow_redirects=True,
+            verify=self.verify_ssl,
+            headers=self.headers,
+        )
+
+        apq_extensions = {
+            "persistedQuery": {
+                "version": 1,
+                "sha256Hash": sha256_hash,
+            }
+        }
+        post_payload: Dict[str, Any] = {"extensions": apq_extensions}
+        if operation_name:
+            post_payload["operationName"] = operation_name
+
+        post_error: Optional[str] = None
+        get_error: Optional[str] = None
+
+        try:
+            # 1. Probe via POST
+            try:
+                resp_post = await c.post(
+                    url,
+                    json=post_payload,
+                    headers={
+                        "Content-Type": "application/json",
+                        "Accept": "application/json, application/graphql-response+json, */*",
+                    },
+                )
+                post_body = resp_post.text
+                post_ct = resp_post.headers.get("content-type", "").lower()
+
+                if "application/json" in post_ct or "application/graphql-response+json" in post_ct or post_body.strip().startswith("{"):
+                    try:
+                        post_json = resp_post.json()
+                        if isinstance(post_json, dict):
+                            data = post_json.get("data")
+                            errors = post_json.get("errors")
+
+                            if data is not None:
+                                result.is_active = True
+                                result.supports_post = True
+                                if operation_name and operation_name not in result.query_fields:
+                                    result.query_fields.append(operation_name)
+
+                            if errors and isinstance(errors, list):
+                                err_str = str(errors).lower()
+                                if any(k in err_str for k in ("persistedquerynotfound", "persisted_query_not_found")):
+                                    # APQ protocol supported by server!
+                                    result.is_active = True
+                                    result.supports_post = True
+                                elif any(k in err_str for k in ("variable", "validation", "syntax", "graphql", "unauthorized", "auth", "forbidden")):
+                                    result.is_active = True
+                                    result.supports_post = True
+                    except Exception:
+                        pass
+            except Exception as e:
+                post_error = str(e)
+                logger.debug("APQ POST probe error for %s: %s", url, e)
+
+            # 2. Probe via GET ?extensions={...}
+            try:
+                get_params = {
+                    "extensions": json.dumps(apq_extensions),
+                }
+                if operation_name:
+                    get_params["operationName"] = operation_name
+
+                resp_get = await c.get(
+                    url,
+                    params=get_params,
+                    headers={
+                        "Accept": "application/json, application/graphql-response+json, */*",
+                    },
+                )
+                get_body = resp_get.text
+                get_ct = resp_get.headers.get("content-type", "").lower()
+
+                if "application/json" in get_ct or "application/graphql-response+json" in get_ct or get_body.strip().startswith("{"):
+                    try:
+                        get_json = resp_get.json()
+                        if isinstance(get_json, dict):
+                            data = get_json.get("data")
+                            errors = get_json.get("errors")
+
+                            if data is not None:
+                                result.is_active = True
+                                result.supports_get = True
+                                if operation_name and operation_name not in result.query_fields:
+                                    result.query_fields.append(operation_name)
+
+                            if errors and isinstance(errors, list):
+                                err_str = str(errors).lower()
+                                if any(k in err_str for k in ("persistedquerynotfound", "persisted_query_not_found")):
+                                    result.is_active = True
+                                    result.supports_get = True
+                                elif any(k in err_str for k in ("variable", "validation", "syntax", "graphql", "unauthorized", "auth", "forbidden")):
+                                    result.is_active = True
+                                    result.supports_get = True
+                    except Exception:
+                        pass
+            except Exception as e:
+                get_error = str(e)
+                logger.debug("APQ GET probe error for %s: %s", url, e)
+
+            if not result.is_active:
+                if post_error and get_error:
+                    result.error = f"APQ probing failed: POST ({post_error}); GET ({get_error})"
+                elif post_error:
+                    result.error = f"APQ POST probe failed: {post_error}"
+                elif get_error:
+                    result.error = f"APQ GET probe failed: {get_error}"
+                else:
+                    result.error = "Endpoint rejected APQ probe (persisted query not supported or unrecognized)"
+            else:
+                result.error = None
+
+            return result
+
+        finally:
+            if not client_provided:
+                await c.aclose()
+
