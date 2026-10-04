@@ -570,7 +570,7 @@ class AsyncSpider:
                 passive_seeds_list, disallow_urls_list = await harvester.discover_seeds(
                     norm_start, include_gateway_probes=False
                 )
-                result.passive_seeds = passive_seeds_list
+                result.passive_seeds = list(dict.fromkeys(passive_seeds_list + disallow_urls_list))
                 result.disallowed_seeds = disallow_urls_list
 
                 # Disallow directives in robots.txt have high API discovery value (+75 score)

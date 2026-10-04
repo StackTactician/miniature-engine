@@ -19,6 +19,9 @@ class TestScanRunner(unittest.IsolatedAsyncioTestCase):
         status = runner.get_status()
         self.assertEqual(status["status"], "idle")
         self.assertEqual(status["stage"], "idle")
+        self.assertEqual(status["counts"]["forms"], 0)
+        self.assertEqual(status["counts"]["hydration_endpoints"], 0)
+        self.assertEqual(status["counts"]["passive_seeds"], 0)
         self.assertEqual(len(runner.logs), 0)
 
     async def test_runner_log_capture(self):
@@ -118,6 +121,77 @@ class TestScanRunner(unittest.IsolatedAsyncioTestCase):
         # Chunk manifests recorded
         self.assertGreaterEqual(len(runner.chunk_manifests), 1)
 
+    async def test_runner_pipeline_with_forms_and_hydration_features(self):
+        page_html = """
+        <!DOCTYPE html>
+        <html>
+        <head><title>App</title></head>
+        <body>
+            <form action="/api/v1/auth/login" method="POST">
+                <input type="text" name="username" value="" />
+                <input type="password" name="password" value="" />
+                <button type="submit">Log In</button>
+            </form>
+            <div hx-post="/api/v1/quick-update" hx-trigger="click">Quick</div>
+            <script>
+                self.__next_f.push([1, '1:HL["/static/css/app.css","style"]\\n2:{"name":"$ACTION_ID_8f93a1c0d2e4b6a8f102","bound":null}\\n']);
+            </script>
+        </body>
+        </html>
+        """
+        robots_txt = "User-agent: *\nDisallow: /admin-internal\n"
+
+        def mock_handler(request: httpx.Request) -> httpx.Response:
+            url_str = str(request.url)
+            if url_str in ("https://formapp.io/", "https://formapp.io"):
+                return httpx.Response(200, headers={"Content-Type": "text/html"}, text=page_html)
+            elif "robots.txt" in url_str:
+                return httpx.Response(200, headers={"Content-Type": "text/plain"}, text=robots_txt)
+            return httpx.Response(404)
+
+        transport = httpx.MockTransport(mock_handler)
+        runner = ScanRunner()
+
+        opts = {
+            "mock_transport": transport,
+            "crawl": True,
+            "max_depth": 1,
+            "max_pages": 5,
+            "crawl_forms": True,
+            "crawl_hydration": True,
+            "passive_seeds": True,
+            "manifest": False,
+            "static_analysis": False,
+            "probe": False,
+            "passive_osint": False,
+        }
+
+        await runner.run("https://formapp.io", opts)
+
+        self.assertEqual(runner.status, "completed")
+        self.assertGreaterEqual(len(runner.forms), 1)
+        self.assertGreaterEqual(len(runner.hydration_endpoints), 1)
+        self.assertGreaterEqual(len(runner.passive_seeds), 1)
+
+        # Check status counts
+        status = runner.get_status()
+        self.assertGreaterEqual(status["counts"]["forms"], 1)
+        self.assertGreaterEqual(status["counts"]["hydration_endpoints"], 1)
+        self.assertGreaterEqual(status["counts"]["passive_seeds"], 1)
+
+        # Check results collections
+        results = runner.get_results()
+        self.assertGreaterEqual(len(results["forms_detailed"]), 1)
+        self.assertGreaterEqual(len(results["hydration_detailed"]), 1)
+        self.assertGreaterEqual(len(results["passive_seeds_detailed"]), 1)
+
+        # Form endpoint should contain synthesized payload sample
+        form_ep = results["forms_detailed"][0]
+        self.assertEqual(form_ep["method"], "POST")
+        self.assertEqual(form_ep["path"], "/api/v1/auth/login")
+        self.assertIn("request_body_sample", form_ep)
+        self.assertIn("username", form_ep["request_body_sample"])
+
 
 class TestWebServerIntegration(unittest.TestCase):
     @classmethod
@@ -137,6 +211,22 @@ class TestWebServerIntegration(unittest.TestCase):
         self.assertIn("MINIATURE ENGINE", resp.text)
         self.assertIn("FEEDBACK & LOGS", resp.text)
         self.assertIn("Copy All Logs", resp.text)
+        # Verify new spider and filter controls
+        self.assertIn("optCrawlForms", resp.text)
+        self.assertIn("optCrawlHydration", resp.text)
+        self.assertIn("optPassiveSeeds", resp.text)
+        self.assertIn("optBlockDangerous", resp.text)
+        self.assertIn("optBlockRabbit", resp.text)
+        self.assertIn("optIncludeRegex", resp.text)
+        self.assertIn("optExcludeRegex", resp.text)
+        self.assertIn("statForms", resp.text)
+        self.assertIn("statHydration", resp.text)
+        self.assertIn("statPassiveSeeds", resp.text)
+        self.assertIn("pillForms", resp.text)
+        self.assertIn("pillHtmx", resp.text)
+        self.assertIn("pillActions", resp.text)
+        self.assertIn("pillHydration", resp.text)
+        self.assertIn("pillRobots", resp.text)
 
     def test_get_status_api(self):
         resp = httpx.get(f"{self.base_url}/api/status")

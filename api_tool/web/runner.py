@@ -81,6 +81,9 @@ class ScanRunner:
         self.client_configs: Dict[str, Any] = {}
         self.sourcemap_results: List[Dict[str, Any]] = []
         self.chunk_manifests: List[Dict[str, Any]] = []
+        self.forms: List[Dict[str, Any]] = []
+        self.hydration_endpoints: List[Dict[str, Any]] = []
+        self.passive_seeds: List[str] = []
         self.summary: Dict[str, Any] = {}
         self.error_message: Optional[str] = None
 
@@ -120,6 +123,9 @@ class ScanRunner:
                 "scripts": len(self.scripts),
                 "assets": len(self.assets),
                 "chunk_manifests": len(self.chunk_manifests),
+                "forms": len(self.forms),
+                "hydration_endpoints": len(self.hydration_endpoints),
+                "passive_seeds": len(self.passive_seeds),
                 "logs": len(self.logs),
             },
             "summary": self.summary,
@@ -152,15 +158,24 @@ class ScanRunner:
                 "summary": self.summary,
                 "client_configs": self.client_configs,
                 "elapsed_seconds": round(self.end_time - self.start_time, 2) if self.end_time else 0.0,
+                "counts": {
+                    "endpoints": len(self.endpoints),
+                    "forms": len(self.forms),
+                    "hydration": len(self.hydration_endpoints),
+                    "passive_seeds": len(self.passive_seeds),
+                },
             },
         )
         data = scan_res.to_dict()
-        # Include detailed specs, graphql, scripts, and sourcemap lists for UI
+        # Include detailed specs, graphql, scripts, sourcemaps, forms, and hydration for UI
         data["specs_detailed"] = self.specs
         data["graphql_detailed"] = self.graphql_results
         data["scripts_detailed"] = sorted(list(self.scripts))
         data["sourcemaps_detailed"] = self.sourcemap_results
         data["chunk_manifests_detailed"] = self.chunk_manifests
+        data["forms_detailed"] = self.forms
+        data["hydration_detailed"] = self.hydration_endpoints
+        data["passive_seeds_detailed"] = self.passive_seeds
         return data
 
     def stop_scan(self) -> bool:
@@ -194,6 +209,9 @@ class ScanRunner:
         self.client_configs.clear()
         self.sourcemap_results.clear()
         self.chunk_manifests.clear()
+        self.forms.clear()
+        self.hydration_endpoints.clear()
+        self.passive_seeds.clear()
         self.summary.clear()
         self.error_message = None
 
@@ -215,6 +233,12 @@ class ScanRunner:
             self.assets.add(a)
         if scan_result.chunk_manifests:
             self.chunk_manifests = [cm.to_dict() for cm in scan_result.chunk_manifests]
+        if "forms" in scan_result.metadata:
+            self.forms = list(scan_result.metadata["forms"])
+        if "hydration_endpoints" in scan_result.metadata:
+            self.hydration_endpoints = list(scan_result.metadata["hydration_endpoints"])
+        if "passive_seeds" in scan_result.metadata:
+            self.passive_seeds = list(scan_result.metadata["passive_seeds"])
         self.summary = dict(scan_result.metadata.get("summary", scan_result.metadata))
         self.add_log(
             "INFO",
@@ -471,6 +495,14 @@ class ScanRunner:
                     for asst in crawl_res.assets:
                         collected_assets.add(asst)
 
+                    self.forms = [f.to_dict() if hasattr(f, "to_dict") else f for f in crawl_res.forms]
+                    self.hydration_endpoints = [
+                        h.to_dict() if hasattr(h, "to_dict") else h for h in crawl_res.hydration_endpoints
+                    ]
+                    self.passive_seeds = list(
+                        dict.fromkeys(crawl_res.passive_seeds + crawl_res.disallowed_seeds)
+                    )
+
                     if crawl_res.failed_urls:
                         self.add_log("WARNING", f"{len(crawl_res.failed_urls)} URLs failed during crawl.", "crawler")
 
@@ -636,6 +668,9 @@ class ScanRunner:
                 # Deduplicate without probing
                 self.endpoints = APIProber._deduplicate_endpoints(collected_endpoints, self.base_url)
 
+        self.summary["forms"] = len(self.forms)
+        self.summary["hydration_endpoints"] = len(self.hydration_endpoints)
+        self.summary["passive_seeds"] = len(self.passive_seeds)
         self.stage = "completed"
         self.add_log(
             "INFO",

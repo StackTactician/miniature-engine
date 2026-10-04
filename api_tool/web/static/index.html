@@ -595,6 +595,75 @@
       color: #ffffff;
     }
 
+    .badge-tag.form {
+      background: #000000;
+      color: #ffffff;
+      border: 1px solid #000000;
+      font-weight: 800;
+    }
+
+    .badge-tag.htmx {
+      background: #ffffff;
+      color: #000000;
+      border: 1px dashed #000000;
+      font-weight: 800;
+    }
+
+    .badge-tag.hydration {
+      background: #eeeeee;
+      color: #000000;
+      border: 1px solid #777777;
+    }
+
+    .badge-tag.robots {
+      background: #ffffff;
+      color: #444444;
+      border: 1px dotted #000000;
+      font-weight: 700;
+    }
+
+    .filter-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+
+    .filter-pill {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 8px;
+      cursor: pointer;
+      text-transform: uppercase;
+      min-height: 26px;
+      border-radius: 0;
+      transition: all 0.1s;
+    }
+
+    .filter-pill:hover {
+      background: var(--surface-hover);
+    }
+
+    .filter-pill.active {
+      background: var(--highlight-bg);
+      color: var(--highlight-text);
+      border-color: var(--highlight-bg);
+    }
+
+    .stat-card.clickable {
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.1s;
+    }
+
+    .stat-card.clickable:hover {
+      background: var(--surface-hover);
+      border-color: var(--border);
+    }
+
     .path-param-highlight {
       font-weight: 700;
       text-decoration: underline;
@@ -896,6 +965,31 @@
         </label>
 
         <label class="opt-label">
+          <input type="checkbox" id="optCrawlForms" checked />
+          <span>Deep Form & Input Analysis</span>
+        </label>
+
+        <label class="opt-label">
+          <input type="checkbox" id="optCrawlHydration" checked />
+          <span>Hydration & Server Actions</span>
+        </label>
+
+        <label class="opt-label">
+          <input type="checkbox" id="optPassiveSeeds" />
+          <span>Passive Seeds (robots.txt & Sitemaps)</span>
+        </label>
+
+        <label class="opt-label">
+          <input type="checkbox" id="optBlockDangerous" checked />
+          <span>Anti-Trap Dangerous Action Blocker</span>
+        </label>
+
+        <label class="opt-label">
+          <input type="checkbox" id="optBlockRabbit" checked />
+          <span>Rabbit-Hole & Loop Blocker</span>
+        </label>
+
+        <label class="opt-label">
           <input type="checkbox" id="optManifest" checked />
           <span>Framework Manifests (Next/Nuxt)</span>
         </label>
@@ -945,6 +1039,11 @@
           <span>Rate:</span><input type="number" id="optRateLimit" value="10" min="1" max="50" />
         </div>
       </div>
+
+      <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; padding-top:8px; border-top:1px dashed var(--border-subtle);">
+        <input type="text" id="optIncludeRegex" placeholder="Include Path Regex (e.g. ^/api/v1/)" style="flex:1 1 200px; font-size:12px; padding:6px 10px; min-height:34px;" />
+        <input type="text" id="optExcludeRegex" placeholder="Exclude Path Regex (e.g. \.(jpg|png)$|/logout)" style="flex:1 1 200px; font-size:12px; padding:6px 10px; min-height:34px;" />
+      </div>
     </div>
   </div>
 
@@ -975,27 +1074,39 @@
       <div class="pane-content">
         <!-- Quick Stats -->
         <div class="stats-grid">
-          <div class="stat-card">
+          <div class="stat-card clickable" onclick="setQuickFilter('all')" title="Click to view All Endpoints">
             <div id="statTotalEndpoints" class="stat-val">0</div>
             <div class="stat-lbl">Endpoints</div>
           </div>
-          <div class="stat-card">
+          <div class="stat-card clickable" onclick="setQuickFilter('live')" title="Click to view Live Probed Endpoints">
             <div id="statLive" class="stat-val">0</div>
             <div class="stat-lbl">Live Probed</div>
           </div>
-          <div class="stat-card">
+          <div class="stat-card clickable" onclick="setQuickFilter('forms')" title="Click to filter by Discovered HTML Forms">
+            <div id="statForms" class="stat-val">0</div>
+            <div class="stat-lbl">Forms</div>
+          </div>
+          <div class="stat-card clickable" onclick="setQuickFilter('actions')" title="Click to filter by Server Actions & Hydration">
+            <div id="statHydration" class="stat-val">0</div>
+            <div class="stat-lbl">Server Actions</div>
+          </div>
+          <div class="stat-card clickable" onclick="setQuickFilter('robots')" title="Click to filter by Robots.txt Disallow & Sitemaps">
+            <div id="statPassiveSeeds" class="stat-val">0</div>
+            <div class="stat-lbl">Passive Seeds</div>
+          </div>
+          <div class="stat-card clickable" onclick="switchTab('chunks')" title="Click to view Cracked Chunks">
             <div id="statChunks" class="stat-val">0</div>
             <div class="stat-lbl">Cracked Chunks</div>
           </div>
-          <div class="stat-card">
+          <div class="stat-card clickable" onclick="switchTab('graphql')" title="Click to view GraphQL Operations">
             <div id="statGraphql" class="stat-val">0</div>
             <div class="stat-lbl">GraphQL & APQ</div>
           </div>
-          <div class="stat-card">
+          <div class="stat-card clickable" onclick="switchTab('specs')" title="Click to view API Specs">
             <div id="statSpecs" class="stat-val">0</div>
             <div class="stat-lbl">Specs</div>
           </div>
-          <div class="stat-card">
+          <div class="stat-card clickable" onclick="switchTab('scripts')" title="Click to view Scripts & Maps">
             <div id="statScripts" class="stat-val">0</div>
             <div class="stat-lbl">Scripts</div>
           </div>
@@ -1003,8 +1114,18 @@
 
         <!-- Tab: Endpoints -->
         <div id="tabContentEndpoints">
+          <div class="filter-pills">
+            <button type="button" class="filter-pill active" id="pillAll" onclick="setQuickFilter('all')">ALL</button>
+            <button type="button" class="filter-pill" id="pillForms" onclick="setQuickFilter('forms')">FORMS (<span id="pillCountForms">0</span>)</button>
+            <button type="button" class="filter-pill" id="pillHtmx" onclick="setQuickFilter('htmx')">HTMX (<span id="pillCountHtmx">0</span>)</button>
+            <button type="button" class="filter-pill" id="pillActions" onclick="setQuickFilter('actions')">SERVER ACTIONS (<span id="pillCountActions">0</span>)</button>
+            <button type="button" class="filter-pill" id="pillHydration" onclick="setQuickFilter('hydration')">HYDRATION (<span id="pillCountHydration">0</span>)</button>
+            <button type="button" class="filter-pill" id="pillRobots" onclick="setQuickFilter('robots')">ROBOTS / SEEDS (<span id="pillCountRobots">0</span>)</button>
+            <button type="button" class="filter-pill" id="pillRest" onclick="setQuickFilter('rest')">REST / API (<span id="pillCountRest">0</span>)</button>
+          </div>
+
           <div class="filter-bar">
-            <input type="text" id="endpointFilter" class="filter-input" placeholder="Search route, method, tag (AST, HAR, Action)..." oninput="renderEndpoints()" />
+            <input type="text" id="endpointFilter" class="filter-input" placeholder="Search route, method, tag (AST, HAR, Form, Action)..." oninput="renderEndpoints()" />
             <select id="endpointStatusFilter" onchange="renderEndpoints()" style="min-height:36px; padding:4px 8px;">
               <option value="all">All Status</option>
               <option value="live">Live (Non-404)</option>
@@ -1014,13 +1135,17 @@
             </select>
             <select id="endpointSourceFilter" onchange="renderEndpoints()" style="min-height:36px; padding:4px 8px;">
               <option value="all">All Sources</option>
+              <option value="form">HTML Forms & Inputs</option>
+              <option value="htmx">HTMX Verbs</option>
+              <option value="server_action">Next.js Server Actions</option>
+              <option value="hydration">Hydration Frameworks</option>
               <option value="tree_sitter_ast">Tree-sitter AST</option>
-              <option value="server_action">Next-Action</option>
               <option value="happy_dom">HappyDOM</option>
               <option value="har_import">HAR Import</option>
               <option value="cracked_chunk">Cracked Chunk</option>
               <option value="spider">Crawler</option>
               <option value="sourcemap">SourceMap</option>
+              <option value="robots">Robots.txt / Seeds</option>
             </select>
           </div>
           <div id="endpointsTableContainer">
@@ -1220,6 +1345,11 @@
     // Presets
     function applyPreset(name) {
       const crawl = document.getElementById('optCrawl');
+      const forms = document.getElementById('optCrawlForms');
+      const hydration = document.getElementById('optCrawlHydration');
+      const seeds = document.getElementById('optPassiveSeeds');
+      const dangerous = document.getElementById('optBlockDangerous');
+      const rabbit = document.getElementById('optBlockRabbit');
       const manifest = document.getElementById('optManifest');
       const stat = document.getElementById('optStatic');
       const chunks = document.getElementById('optChunks');
@@ -1232,6 +1362,11 @@
 
       if (name === 'full') {
         crawl.checked = true;
+        if (forms) forms.checked = true;
+        if (hydration) hydration.checked = true;
+        if (seeds) seeds.checked = true;
+        if (dangerous) dangerous.checked = true;
+        if (rabbit) rabbit.checked = true;
         manifest.checked = true;
         stat.checked = true;
         chunks.checked = true;
@@ -1243,6 +1378,11 @@
         priv.checked = false;
       } else if (name === 'stealth') {
         crawl.checked = true;
+        if (forms) forms.checked = true;
+        if (hydration) hydration.checked = true;
+        if (seeds) seeds.checked = false;
+        if (dangerous) dangerous.checked = true;
+        if (rabbit) rabbit.checked = true;
         manifest.checked = true;
         stat.checked = true;
         chunks.checked = true;
@@ -1254,6 +1394,11 @@
         priv.checked = false;
       } else if (name === 'static') {
         crawl.checked = true;
+        if (forms) forms.checked = false;
+        if (hydration) hydration.checked = false;
+        if (seeds) seeds.checked = false;
+        if (dangerous) dangerous.checked = true;
+        if (rabbit) rabbit.checked = true;
         manifest.checked = true;
         stat.checked = true;
         chunks.checked = true;
@@ -1263,6 +1408,11 @@
         http.checked = false;
       } else if (name === 'probe') {
         crawl.checked = false;
+        if (forms) forms.checked = false;
+        if (hydration) hydration.checked = false;
+        if (seeds) seeds.checked = false;
+        if (dangerous) dangerous.checked = true;
+        if (rabbit) rabbit.checked = true;
         manifest.checked = false;
         stat.checked = false;
         chunks.checked = false;
@@ -1272,6 +1422,11 @@
         http.checked = true;
       } else if (name === 'local') {
         crawl.checked = true;
+        if (forms) forms.checked = true;
+        if (hydration) hydration.checked = true;
+        if (seeds) seeds.checked = true;
+        if (dangerous) dangerous.checked = false;
+        if (rabbit) rabbit.checked = true;
         manifest.checked = true;
         stat.checked = true;
         chunks.checked = true;
@@ -1309,10 +1464,25 @@
         return;
       }
 
+      const optForms = document.getElementById('optCrawlForms');
+      const optHyd = document.getElementById('optCrawlHydration');
+      const optSeeds = document.getElementById('optPassiveSeeds');
+      const optDangerous = document.getElementById('optBlockDangerous');
+      const optRabbit = document.getElementById('optBlockRabbit');
+      const optInc = document.getElementById('optIncludeRegex');
+      const optExc = document.getElementById('optExcludeRegex');
+
       const options = {
         crawl: document.getElementById('optCrawl').checked,
         max_depth: parseInt(document.getElementById('optDepth').value, 10) || 2,
         max_pages: parseInt(document.getElementById('optPages').value, 10) || 30,
+        crawl_forms: optForms ? optForms.checked : true,
+        crawl_hydration: optHyd ? optHyd.checked : true,
+        passive_seeds: optSeeds ? optSeeds.checked : false,
+        block_dangerous_actions: optDangerous ? optDangerous.checked : true,
+        block_rabbit_holes: optRabbit ? optRabbit.checked : true,
+        include_regex: (optInc && optInc.value.trim()) ? optInc.value.trim() : null,
+        exclude_regex: (optExc && optExc.value.trim()) ? optExc.value.trim() : null,
         manifest: document.getElementById('optManifest').checked,
         static_analysis: document.getElementById('optStatic').checked,
         probe: document.getElementById('optHttp').checked || document.getElementById('optSpecs').checked || document.getElementById('optGraphql').checked,
@@ -1381,7 +1551,7 @@
       logOffset = 0;
       resetScanState();
       clearLogs();
-      updateCountBadges({ endpoints: 0, specs: 0, graphql: 0, scripts: 0, chunk_manifests: 0, live: 0 });
+      updateCountBadges({ endpoints: 0, specs: 0, graphql: 0, scripts: 0, chunk_manifests: 0, live: 0, forms: 0, hydration_endpoints: 0, passive_seeds: 0 });
       renderEndpoints();
       document.getElementById('chunksContainer').innerHTML = '<div class="empty-state">No cracked Webpack 4/5, Vite, or Next.js chunk manifests detected yet.</div>';
       document.getElementById('specsContainer').innerHTML = '<div class="empty-state">No OpenAPI / Swagger specifications found.</div>';
@@ -1471,6 +1641,9 @@
       const gq = (counts.graphql || 0) + (counts.graphql_operations || 0);
       const sc = counts.scripts || 0;
       const ch = counts.chunk_manifests || 0;
+      const fm = counts.forms || 0;
+      const hy = counts.hydration_endpoints || 0;
+      const ps = counts.passive_seeds || 0;
 
       document.getElementById('countEndpoints').innerText = ep;
       document.getElementById('mobileCountEndpoints').innerText = ep;
@@ -1484,6 +1657,13 @@
       document.getElementById('statGraphql').innerText = gq;
       document.getElementById('statScripts').innerText = sc;
       document.getElementById('statChunks').innerText = ch;
+
+      const elFm = document.getElementById('statForms');
+      if (elFm) elFm.innerText = fm;
+      const elHy = document.getElementById('statHydration');
+      if (elHy) elHy.innerText = hy;
+      const elPs = document.getElementById('statPassiveSeeds');
+      if (elPs) elPs.innerText = ps;
     }
 
     async function fetchResults() {
@@ -1627,6 +1807,16 @@
       renderConfigs();
     }
 
+    let quickFilter = 'all';
+
+    function setQuickFilter(type) {
+      quickFilter = type;
+      document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+      const activePill = document.getElementById(`pill${type.charAt(0).toUpperCase() + type.slice(1)}`);
+      if (activePill) activePill.classList.add('active');
+      renderEndpoints();
+    }
+
     // Endpoints Rendering
     function renderEndpoints() {
       const container = document.getElementById('endpointsTableContainer');
@@ -1636,18 +1826,77 @@
         return;
       }
 
+      // Calculate category counts for filter pills
+      let countForms = 0;
+      let countHtmx = 0;
+      let countActions = 0;
+      let countHydration = 0;
+      let countRobots = 0;
+      let countRest = 0;
+
+      endpoints.forEach(ep => {
+        const tags = (ep.tags || []).map(t => String(t).toLowerCase());
+        const src = (ep.source || '').toLowerCase();
+        const isForm = src === 'form' || tags.includes('form');
+        const isHtmx = tags.includes('htmx');
+        const isAction = src === 'server_action' || tags.includes('server_action') || (ep.path && ep.path.includes('$ACTION_ID'));
+        const isHyd = src === 'hydration' || tags.some(t => ['nextjs', 'nuxt', 'remix', 'sveltekit'].includes(t));
+        const isSeed = tags.includes('robots.txt') || tags.includes('sitemap') || tags.includes('passive_seed') || src === 'passive_seed';
+
+        if (isForm) countForms++;
+        if (isHtmx) countHtmx++;
+        if (isAction) countActions++;
+        if (isHyd) countHydration++;
+        if (isSeed) countRobots++;
+        if (!isForm && !isHtmx && !isAction && !isHyd && !isSeed) countRest++;
+      });
+
+      const elPf = document.getElementById('pillCountForms');
+      if (elPf) elPf.innerText = countForms;
+      const elPh = document.getElementById('pillCountHtmx');
+      if (elPh) elPh.innerText = countHtmx;
+      const elPa = document.getElementById('pillCountActions');
+      if (elPa) elPa.innerText = countActions;
+      const elPy = document.getElementById('pillCountHydration');
+      if (elPy) elPy.innerText = countHydration;
+      const elPr = document.getElementById('pillCountRobots');
+      if (elPr) elPr.innerText = countRobots;
+      const elPrt = document.getElementById('pillCountRest');
+      if (elPrt) elPrt.innerText = countRest;
+
       const query = document.getElementById('endpointFilter').value.toLowerCase();
       const statusFilter = document.getElementById('endpointStatusFilter').value;
       const sourceFilter = document.getElementById('endpointSourceFilter').value;
 
       const filtered = endpoints.filter(ep => {
+        const tags = (ep.tags || []).map(t => String(t).toLowerCase());
+        const src = (ep.source || '').toLowerCase();
+
+        // Quick pill filter
+        if (quickFilter === 'forms') {
+          if (src !== 'form' && !tags.includes('form')) return false;
+        } else if (quickFilter === 'htmx') {
+          if (!tags.includes('htmx')) return false;
+        } else if (quickFilter === 'actions') {
+          if (src !== 'server_action' && !tags.includes('server_action') && !(ep.path && ep.path.includes('$ACTION_ID'))) return false;
+        } else if (quickFilter === 'hydration') {
+          if (src !== 'hydration' && !tags.some(t => ['nextjs', 'nuxt', 'remix', 'sveltekit'].includes(t))) return false;
+        } else if (quickFilter === 'robots') {
+          if (!tags.includes('robots.txt') && !tags.includes('sitemap') && !tags.includes('passive_seed') && src !== 'passive_seed') return false;
+        } else if (quickFilter === 'rest') {
+          if (src === 'form' || tags.includes('form') || tags.includes('htmx') || src === 'server_action' || tags.includes('server_action')) return false;
+        } else if (quickFilter === 'live') {
+          if (!ep.active_status || ep.active_status === 404 || ep.active_status === 0) return false;
+        }
+
         if (query) {
           const matchPath = (ep.path || '').toLowerCase().includes(query);
           const matchMethod = (ep.method || '').toLowerCase().includes(query);
           const matchSource = (ep.source || '').toLowerCase().includes(query);
           const matchStatus = String(ep.active_status || '').includes(query);
           const matchSummary = (ep.summary || '').toLowerCase().includes(query);
-          if (!matchPath && !matchMethod && !matchSource && !matchStatus && !matchSummary) return false;
+          const matchTags = tags.some(t => t.includes(query));
+          if (!matchPath && !matchMethod && !matchSource && !matchStatus && !matchSummary && !matchTags) return false;
         }
 
         if (statusFilter === 'live') {
@@ -1661,7 +1910,21 @@
         }
 
         if (sourceFilter !== 'all') {
-          if (ep.source !== sourceFilter) return false;
+          if (sourceFilter === 'form') {
+            if (src !== 'form' && !tags.includes('form')) return false;
+          } else if (sourceFilter === 'htmx') {
+            if (!tags.includes('htmx')) return false;
+          } else if (sourceFilter === 'server_action') {
+            if (src !== 'server_action' && !tags.includes('server_action') && !(ep.path && ep.path.includes('$ACTION_ID'))) return false;
+          } else if (sourceFilter === 'hydration') {
+            if (src !== 'hydration' && !tags.some(t => ['nextjs', 'nuxt', 'remix', 'sveltekit'].includes(t))) return false;
+          } else if (sourceFilter === 'robots') {
+            if (!tags.includes('robots.txt') && !tags.includes('sitemap') && !tags.includes('passive_seed') && src !== 'passive_seed') return false;
+          } else if (sourceFilter === 'spider') {
+            if (src !== 'spider' && src !== 'crawler') return false;
+          } else {
+            if (src !== sourceFilter && !tags.includes(sourceFilter)) return false;
+          }
         }
 
         return true;
@@ -1699,12 +1962,30 @@
 
         // Subsystem tags
         let tagsHtml = '';
-        if (ep.source === 'tree_sitter_ast') tagsHtml += `<span class="badge-tag ast">AST</span>`;
-        else if (ep.source === 'server_action') tagsHtml += `<span class="badge-tag action">NEXT-ACT</span>`;
-        else if (ep.source === 'happy_dom') tagsHtml += `<span class="badge-tag dom">DOM</span>`;
-        else if (ep.source === 'har_import') tagsHtml += `<span class="badge-tag har">HAR</span>`;
-        else if (ep.source === 'cracked_chunk') tagsHtml += `<span class="badge-tag chunk">CHUNK</span>`;
-        else if (ep.source) tagsHtml += `<span class="badge-tag">${escapeHtml(ep.source)}</span>`;
+        const tags = (ep.tags || []).map(t => String(t).toLowerCase());
+        const src = (ep.source || '').toLowerCase();
+
+        if (src === 'form' || tags.includes('form')) tagsHtml += `<span class="badge-tag form">FORM</span>`;
+        if (tags.includes('htmx')) tagsHtml += `<span class="badge-tag htmx">HTMX</span>`;
+        if (src === 'server_action' || tags.includes('server_action') || (ep.path && ep.path.includes('$ACTION_ID'))) {
+          tagsHtml += `<span class="badge-tag action">NEXT-ACT</span>`;
+        }
+        if (tags.includes('sveltekit')) tagsHtml += `<span class="badge-tag hydration">SVELTEKIT</span>`;
+        else if (tags.includes('nuxt')) tagsHtml += `<span class="badge-tag hydration">NUXT</span>`;
+        else if (tags.includes('remix')) tagsHtml += `<span class="badge-tag hydration">REMIX</span>`;
+        else if (src === 'hydration') tagsHtml += `<span class="badge-tag hydration">HYDRATION</span>`;
+
+        if (tags.includes('robots.txt') || tags.includes('sitemap') || tags.includes('passive_seed') || src === 'passive_seed') {
+          tagsHtml += `<span class="badge-tag robots">SEED</span>`;
+        }
+
+        if (src === 'tree_sitter_ast') tagsHtml += `<span class="badge-tag ast">AST</span>`;
+        else if (src === 'happy_dom') tagsHtml += `<span class="badge-tag dom">DOM</span>`;
+        else if (src === 'har_import') tagsHtml += `<span class="badge-tag har">HAR</span>`;
+        else if (src === 'cracked_chunk') tagsHtml += `<span class="badge-tag chunk">CHUNK</span>`;
+        else if (src && !['form', 'server_action', 'hydration', 'crawler', 'spider'].includes(src) && !tagsHtml) {
+          tagsHtml += `<span class="badge-tag">${escapeHtml(src)}</span>`;
+        }
 
         if (ep.auth_type) {
           tagsHtml += `<span class="badge-tag" style="border-style:dotted;">${escapeHtml(ep.auth_type)}</span>`;
@@ -1744,6 +2025,10 @@
         </div>
       `;
 
+      if (ep.tags && ep.tags.length > 0) {
+        body += `<div style="margin-bottom: 12px;"><strong>Tags:</strong> ${ep.tags.map(t => `<span class="badge-tag">${escapeHtml(t)}</span>`).join('')}</div>`;
+      }
+
       if (ep.auth_type || ep.auth_header_or_param) {
         body += `
           <div style="margin-bottom: 12px; padding: 8px; border: 1px solid var(--border); background: var(--surface);">
@@ -1771,8 +2056,12 @@
         body += `<h4>Discovered Headers</h4><pre>${escapeHtml(JSON.stringify(ep.headers, null, 2))}</pre>`;
       }
 
-      if (ep.request_body_schema || ep.request_body_sample) {
-        body += `<h4>Request Body Schema (OpenAPI 3.1)</h4><pre>${escapeHtml(JSON.stringify(ep.request_body_schema || ep.request_body_sample, null, 2))}</pre>`;
+      if (ep.request_body_sample) {
+        body += `<h4>Synthesized Request Body / Form Payload</h4><pre style="background:var(--surface); padding:8px; border:1px solid var(--border); overflow-x:auto;">${escapeHtml(JSON.stringify(ep.request_body_sample, null, 2))}</pre>`;
+      }
+
+      if (ep.request_body_schema) {
+        body += `<h4>Request Body Schema (OpenAPI 3.1)</h4><pre style="background:var(--surface); padding:8px; border:1px solid var(--border); overflow-x:auto;">${escapeHtml(JSON.stringify(ep.request_body_schema, null, 2))}</pre>`;
       }
 
       if (ep.responses && ep.responses.length > 0) {
